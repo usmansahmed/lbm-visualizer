@@ -108,19 +108,19 @@ target_include_directories(glad
 
 add_executable(lbm_visualizer
     src/main.cpp
-    src/CudaCheck.cu
+    src/VtiReader.cpp
+    src/SliceExtractor.cpp
+    src/Shader.cpp
+    src/ScalarTexture.cpp
+    src/Renderer.cpp
+    src/Application.cpp
+    include/SimulationFrame.hpp
+    include/VisualizationState.hpp
 )
 
 target_include_directories(lbm_visualizer
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
-add_library(stb_image_lib INTERFACE)
-
-target_include_directories(stb_image_lib
-    INTERFACE
-        ${CMAKE_CURRENT_SOURCE_DIR}/external/stb
 )
 
 target_link_libraries(lbm_visualizer
@@ -130,7 +130,6 @@ target_link_libraries(lbm_visualizer
         OpenGL::GL
         CUDA::cudart
         glm::glm
-        stb_image_lib
 		tinyxml2
 )
 
