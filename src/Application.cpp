@@ -26,6 +26,7 @@ Application::Application()
     catch (...)
     {
         texture_.reset();
+        obstacleTexture_.reset();
         renderer_.reset();
         shader_.reset();
 
@@ -48,7 +49,9 @@ Application::~Application()
         glfwMakeContextCurrent(window_);
     }
 
+    userInterface_.reset();
     texture_.reset();
+    obstacleTexture_.reset();
     renderer_.reset();
     shader_.reset();
 
@@ -87,7 +90,7 @@ void Application::initializeWindow()
     glfwSetWindowUserPointer(window_, this);
 
     glfwSetKeyCallback(window_, &keyCallback);
-    glfwSetFramebufferSizeCallback(window_, &framebufferSizeCallback);
+    // glfwSetFramebufferSizeCallback(window_, &framebufferSizeCallback);
     glfwSwapInterval(1);
 }
 
@@ -118,9 +121,14 @@ void Application::initializeResources()
 
     texture_ = std::make_unique<ScalarTexture>();
 
+    obstacleTexture_ = std::make_unique<ScalarTexture>();
+
+    userInterface_ = std::make_unique<UserInterface>(window_);
+
     shader_->use();
 
-    shader_->setInt("texture1", 0);
+    shader_->setInt("fieldTexture", 0);
+    shader_->setInt("obstacleTexture", 1);
 }
 
 void Application::loadInitialFrame()
@@ -150,15 +158,6 @@ void Application::loadInitialFrame()
     state_.fieldChanged = true;
 
     lastPlaybackTime_ = glfwGetTime();
-
-    std::cout
-        << "Loaded initial frame: "
-        << filePath.filename().string()
-        << '\n'
-        << "Grid dimensions: "
-        << frame_.nx << " x "
-        << frame_.ny << " x "
-        << frame_.nz << '\n';
 }
 
 void Application::updatePlayback()
@@ -202,8 +201,6 @@ void Application::updatePlayback()
     state_.dataChanged = true;
 
     lastPlaybackTime_ = currentTime;
-
-    std::cout << "Loaded frame: " << nextFilePath.filename().string() << '\n';
 }
 
 void Application::updateVisualization()
@@ -221,6 +218,18 @@ void Application::updateVisualization()
     getSliceDimensions(state_.orientation, frame_.nx, frame_.ny, frame_.nz, textureWidth_, textureHeight_);
 
     extractSlice(frame_, slice_, state_.orientation, state_.displayField, state_.currentSlice);
+    extractSlice(frame_, obstacleSlice_, state_.orientation, DisplayField::Obstacle, state_.currentSlice);
+
+    if (state_.displayField == DisplayField::VelocityMagnitude)
+    {
+        state_.minimumValue = 0.0f;
+        state_.maximumValue = 0.35f;
+    }
+    else
+    {
+        state_.minimumValue = -0.35f;
+        state_.maximumValue = 0.35f;
+    }
 
     const std::size_t expectedSliceSize = static_cast<std::size_t>(textureWidth_) * static_cast<std::size_t>(textureHeight_);
 
@@ -229,7 +238,19 @@ void Application::updateVisualization()
         throw std::runtime_error("Extracted slice has an unexpected size.");
     }
 
+    if (state_.automaticColorScaling && !slice_.empty())
+    {
+        const auto [minimumIterator, maximumIterator] = std::minmax_element(slice_.begin(), slice_.end());
+
+        state_.automaticMinimumValue = *minimumIterator;
+        state_.automaticMaximumValue = *maximumIterator;
+    }
+
+    state_.finalMinimum = state_.automaticColorScaling ? state_.automaticMinimumValue : state_.minimumValue;
+    state_.finalMaximum = state_.automaticColorScaling ? state_.automaticMaximumValue : state_.maximumValue;
+
     texture_->update(textureWidth_, textureHeight_, slice_);
+    obstacleTexture_->update(textureWidth_, textureHeight_, obstacleSlice_);
 
     state_.dataChanged = false;
     state_.sliceChanged = false;
@@ -243,13 +264,17 @@ void Application::render()
 
     shader_->use();
 
-    shader_->setInt("texture1", 0);
+    shader_->setInt("fieldTexture", 0);
 
-    shader_->setFloat("minimumValue", state_.minimumValue);
+    shader_->setInt("obstacleTexture", 1);
 
-    shader_->setFloat("maximumValue", state_.maximumValue);
+    shader_->setFloat("minimumValue", state_.finalMinimum);
+
+    shader_->setFloat("maximumValue", state_.finalMaximum);
 
     texture_->bind(0);
+
+    obstacleTexture_->bind(1);
 
     renderer_->drawQuad();
 }
@@ -260,11 +285,18 @@ void Application::run()
     {
         glfwPollEvents();
 
+        userInterface_->beginFrame();
+        userInterface_->drawControls(state_, frame_);
+
         updatePlayback();
         updateVisualization();
+        setTextureViewport();
         render();
 
+        userInterface_->render();
+
         glfwSwapBuffers(window_);
+
     }
 }
 
@@ -283,15 +315,15 @@ void Application::keyCallback(
     application->handleKey(key, scancode, action, mods);
 }
 
-void Application::framebufferSizeCallback(GLFWwindow *window, int width, int height)
-{
-    auto *application = static_cast<Application *>(glfwGetWindowUserPointer(window));
+// void Application::framebufferSizeCallback(GLFWwindow *window, int width, int height)
+// {
+//     auto *application = static_cast<Application *>(glfwGetWindowUserPointer(window));
 
-    if (application == nullptr)
-        return;
+//     if (application == nullptr)
+//         return;
 
-    application->handleFrameBufferSize(width, height);
-}
+//     application->handleFrameBufferSize(width, height);
+// }
 
 void Application::handleKey(
     int key,
@@ -363,11 +395,11 @@ void Application::handleKey(
     }
 }
 
-void Application::handleFrameBufferSize(int width, int height)
-{
-    (void)window_;
-    glViewport(0, 0, width, height);
-}
+// void Application::handleFrameBufferSize(int width, int height)
+// {
+//     (void)window_;
+//     glViewport(0, 0, width, height);
+// }
 
 void Application::setOrientation(SliceOrientation orientation)
 {
@@ -382,4 +414,43 @@ void Application::setOrientation(SliceOrientation orientation)
 
     state_.orientationChanged = true;
     state_.sliceChanged = true;
+}
+
+void Application::setTextureViewport()
+{
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+
+    glfwGetFramebufferSize(
+        window_,
+        &framebufferWidth,
+        &framebufferHeight);
+    glViewport(
+        0,
+        0,
+        framebufferWidth,
+        framebufferHeight);
+
+    const float windowAspect = static_cast<float>(framebufferWidth) / static_cast<float>(framebufferHeight);
+    const float textureAspect = static_cast<float>(textureWidth_) / static_cast<float>(textureHeight_);
+
+    int viewportWidth = framebufferWidth;
+    int viewportHeight = framebufferHeight;
+    int viewportX = 0;
+    int viewportY = 0;
+
+    if (windowAspect > textureAspect)
+    {
+        viewportHeight = framebufferHeight;
+        viewportWidth = static_cast<int>(framebufferHeight * textureAspect);
+        viewportX = (framebufferWidth - viewportWidth) / 2;
+    }
+    else
+    {
+        viewportWidth = framebufferWidth;
+        viewportHeight = static_cast<int>(framebufferWidth / textureAspect);
+        viewportY = (framebufferHeight - viewportHeight) / 2;
+    }
+
+    glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
 }

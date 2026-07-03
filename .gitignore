@@ -3,3 +3,4 @@ assets/
 *.obj
 *.exe
 .vscode/
+imgui.ini

@@ -103,6 +103,33 @@ target_include_directories(glad
 )
 
 # ---------------------------
+# IMGUI
+# ---------------------------
+set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external/imgui")
+
+add_library(imgui STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+
+target_include_directories(imgui
+    PUBLIC
+        ${IMGUI_DIR}
+        ${IMGUI_DIR}/backends
+)
+
+target_link_libraries(imgui
+    PUBLIC
+        glfw
+)
+
+# ---------------------------
 # Application
 # ---------------------------
 
@@ -113,6 +140,7 @@ add_executable(lbm_visualizer
     src/Shader.cpp
     src/ScalarTexture.cpp
     src/Renderer.cpp
+    src/UserInterface.cpp
     src/Application.cpp
     include/SimulationFrame.hpp
     include/VisualizationState.hpp
@@ -131,6 +159,7 @@ target_link_libraries(lbm_visualizer
         CUDA::cudart
         glm::glm
 		tinyxml2
+        imgui
 )
 
 set_target_properties(lbm_visualizer PROPERTIES

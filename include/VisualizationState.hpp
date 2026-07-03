@@ -18,7 +18,12 @@ struct VisualizationState
     bool sliceChanged = true;
     bool orientationChanged = true;
     bool fieldChanged = true;
+    bool automaticColorScaling = false;
 
     float minimumValue = 0.0f;
     float maximumValue = 0.35f;
+    float automaticMinimumValue;
+    float automaticMaximumValue;
+    float finalMinimum;
+    float finalMaximum;
 };

@@ -14,120 +14,77 @@ namespace
         return static_cast<std::size_t>(x) + static_cast<std::size_t>(nx) * (static_cast<std::size_t>(y) + static_cast<std::size_t>(ny) * z);
     }
 
-    void extractVelocityMagnitudeXYSlice(
-        const std::vector<float> &velocityX,
-        const std::vector<float> &velocityY,
-        const std::vector<float> &velocityZ,
+    void extractXYSlice(
+        const SimulationFrame &frame,
         std::vector<float> &slice,
-        int nx,
-        int ny,
-        int nz,
+        DisplayField field,
         int fixedZ)
     {
 
         slice.resize(
-            static_cast<std::size_t>(nx) *
-            static_cast<std::size_t>(ny));
+            static_cast<std::size_t>(frame.nx) *
+            static_cast<std::size_t>(frame.ny));
 
-        for (int y = 0; y < ny; ++y)
+        for (int y = 0; y < frame.ny; ++y)
         {
-            for (int x = 0; x < nx; ++x)
+            for (int x = 0; x < frame.nx; ++x)
             {
                 const std::size_t sourceIndex =
-                    index3D(x, y, fixedZ, nx, ny);
+                    index3D(x, y, fixedZ, frame.nx, frame.ny);
 
-                const float ux = velocityX[sourceIndex];
-                const float uy = velocityY[sourceIndex];
-                const float uz = velocityZ[sourceIndex];
+                const std::size_t destinationIndex = static_cast<std::size_t>(x) + static_cast<std::size_t>(frame.nx) * y;
 
-                const float speed =
-                    std::sqrt(
-                        ux * ux +
-                        uy * uy +
-                        uz * uz);
-
-                const std::size_t destinationIndex =
-                    static_cast<std::size_t>(x) + static_cast<std::size_t>(nx) * y;
-
-                slice[destinationIndex] = speed;
+                slice[destinationIndex] = getDisplayValue(frame, field, sourceIndex);
             }
         }
     }
 
-    void extractVelocityMagnitudeYZSlice(
-        const std::vector<float> &velocityX,
-        const std::vector<float> &velocityY,
-        const std::vector<float> &velocityZ,
+    void extractYZSlice(
+        const SimulationFrame &frame,
         std::vector<float> &slice,
-        int nx,
-        int ny,
-        int nz,
+        DisplayField field,
         int fixedX)
     {
         slice.resize(
-            static_cast<std::size_t>(ny) *
-            static_cast<std::size_t>(nz));
+            static_cast<std::size_t>(frame.ny) *
+            static_cast<std::size_t>(frame.nz));
 
-        for (int z = 0; z < nz; ++z)
+        for (int z = 0; z < frame.nz; ++z)
         {
-            for (int y = 0; y < ny; ++y)
+            for (int y = 0; y < frame.ny; ++y)
             {
                 const std::size_t sourceIndex =
-                    index3D(fixedX, y, z, nx, ny);
-
-                const float ux = velocityX[sourceIndex];
-                const float uy = velocityY[sourceIndex];
-                const float uz = velocityZ[sourceIndex];
-
-                const float speed =
-                    std::sqrt(
-                        ux * ux +
-                        uy * uy +
-                        uz * uz);
+                    index3D(fixedX, y, z, frame.nx, frame.ny);
 
                 const std::size_t destinationIndex =
-                    static_cast<std::size_t>(y) + static_cast<std::size_t>(ny) * z;
+                    static_cast<std::size_t>(y) + static_cast<std::size_t>(frame.ny) * z;
 
-                slice[destinationIndex] = speed;
+                slice[destinationIndex] = getDisplayValue(frame, field, sourceIndex);
             }
         }
     }
 
-    void extractVelocityMagnitudeXZSlice(
-        const std::vector<float> &velocityX,
-        const std::vector<float> &velocityY,
-        const std::vector<float> &velocityZ,
+    void extractXZSlice(
+        const SimulationFrame &frame,
         std::vector<float> &slice,
-        int nx,
-        int ny,
-        int nz,
+        DisplayField field,
         int fixedY)
     {
         slice.resize(
-            static_cast<std::size_t>(nx) *
-            static_cast<std::size_t>(nz));
+            static_cast<std::size_t>(frame.nx) *
+            static_cast<std::size_t>(frame.nz));
 
-        for (int z = 0; z < nz; ++z)
+        for (int z = 0; z < frame.nz; ++z)
         {
-            for (int x = 0; x < nx; ++x)
+            for (int x = 0; x < frame.nx; ++x)
             {
                 const std::size_t sourceIndex =
-                    index3D(x, fixedY, z, nx, ny);
-
-                const float ux = velocityX[sourceIndex];
-                const float uy = velocityY[sourceIndex];
-                const float uz = velocityZ[sourceIndex];
-
-                const float speed =
-                    std::sqrt(
-                        ux * ux +
-                        uy * uy +
-                        uz * uz);
+                    index3D(x, fixedY, z, frame.nx, frame.ny);
 
                 const std::size_t destinationIndex =
-                    static_cast<std::size_t>(x) + static_cast<std::size_t>(nx) * z;
+                    static_cast<std::size_t>(x) + static_cast<std::size_t>(frame.nx) * z;
 
-                slice[destinationIndex] = speed;
+                slice[destinationIndex] = getDisplayValue(frame, field, sourceIndex);
             }
         }
     }
@@ -186,14 +143,49 @@ void extractSlice(const SimulationFrame &frame, std::vector<float> &output, Slic
 
     if (orientation == SliceOrientation::XY)
     {
-        extractVelocityMagnitudeXYSlice(frame.velocityX, frame.velocityY, frame.velocityZ, output, frame.nx, frame.ny, frame.nz, sliceIndex);
+        extractXYSlice(frame, output, field, sliceIndex);
     }
     else if (orientation == SliceOrientation::YZ)
     {
-        extractVelocityMagnitudeYZSlice(frame.velocityX, frame.velocityY, frame.velocityZ, output, frame.nx, frame.ny, frame.nz, sliceIndex);
+        extractYZSlice(frame, output, field, sliceIndex);
     }
     else
     {
-        extractVelocityMagnitudeXZSlice(frame.velocityX, frame.velocityY, frame.velocityZ, output, frame.nx, frame.ny, frame.nz, sliceIndex);
+        extractXZSlice(frame, output, field, sliceIndex);
     }
+}
+
+float getDisplayValue(const SimulationFrame &frame, DisplayField field, std::size_t index)
+{
+    switch (field)
+    {
+    case DisplayField::VelocityMagnitude:
+    {
+        const float ux = frame.velocityX[index];
+        const float uy = frame.velocityY[index];
+        const float uz = frame.velocityZ[index];
+
+        return std::sqrt(
+            ux * ux +
+            uy * uy +
+            uz * uz);
+    }
+
+    case DisplayField::VelocityX:
+        return frame.velocityX[index];
+
+    case DisplayField::VelocityY:
+        return frame.velocityY[index];
+
+    case DisplayField::VelocityZ:
+        return frame.velocityZ[index];
+
+    case DisplayField::Density:
+        return frame.density[index];
+
+    case DisplayField::Obstacle:
+        return frame.obstacle[index];
+    }
+
+    return 0.0f;
 }

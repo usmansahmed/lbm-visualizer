@@ -2,7 +2,8 @@
 
 uniform float maximumValue;
 uniform float minimumValue;
-uniform sampler2D texture1;
+uniform sampler2D fieldTexture;
+uniform sampler2D obstacleTexture;
 in vec2 TexCoord;
 out vec4 FragColor;
 
@@ -44,7 +45,15 @@ vec3 applyColorMap(float t)
 
 void main()
 {
-    float value = texture(texture1, TexCoord).r;
+    float obstacle = texture(obstacleTexture, TexCoord).r;
+
+    if (obstacle > 0.5)
+    {
+        FragColor = vec4(0.15, 0.15, 0.15, 1.0);
+        return;
+    }
+
+    float value = texture(fieldTexture, TexCoord).r;
     float range = maximumValue - minimumValue;
     float normalizedValue = (value - minimumValue) / range;
     normalizedValue = clamp(normalizedValue, 0.0, 1);
