@@ -1,4 +1,5 @@
 #include "Application.hpp"
+#include "VelocityArrowBuilder.hpp"
 
 #include <cstddef>
 #include <sstream>
@@ -53,6 +54,8 @@ Application::~Application()
     texture_.reset();
     obstacleTexture_.reset();
     renderer_.reset();
+    arrowRenderer_.reset();
+    arrowShader_.reset();
     shader_.reset();
 
     if (window_ != nullptr)
@@ -115,9 +118,11 @@ void Application::initializeOpenGL()
 
 void Application::initializeResources()
 {
-    shader_ = std::make_unique<Shader>("shaders/vert.glsl", "shaders/frag.glsl");
+    shader_ = std::make_unique<Shader>("shaders/quad.vert", "shaders/quad.frag");
+    arrowShader_ = std::make_unique<Shader>("shaders/velocity_arrows.vert", "shaders/velocity_arrows.frag");
 
     renderer_ = std::make_unique<Renderer>();
+    arrowRenderer_ = std::make_unique<VelocityArrowRenderer>();
 
     texture_ = std::make_unique<ScalarTexture>();
 
@@ -208,54 +213,74 @@ void Application::updateVisualization()
     const bool visualizationChanged = state_.dataChanged || state_.sliceChanged ||
                                       state_.orientationChanged || state_.fieldChanged;
 
-    if (!visualizationChanged)
-        return;
+    const bool arrowsChanged = state_.dataChanged || state_.sliceChanged ||
+                               state_.orientationChanged || state_.arrowsChanged;
 
-    state_.maximumSlice = getMaximumSliceIndex(state_.orientation, frame_.nx, frame_.ny, frame_.nz);
-
-    state_.currentSlice = std::clamp(state_.currentSlice, 0, state_.maximumSlice);
-
-    getSliceDimensions(state_.orientation, frame_.nx, frame_.ny, frame_.nz, textureWidth_, textureHeight_);
-
-    extractSlice(frame_, slice_, state_.orientation, state_.displayField, state_.currentSlice);
-    extractSlice(frame_, obstacleSlice_, state_.orientation, DisplayField::Obstacle, state_.currentSlice);
-
-    if (state_.displayField == DisplayField::VelocityMagnitude)
+    if (visualizationChanged)
     {
-        state_.minimumValue = 0.0f;
-        state_.maximumValue = 0.35f;
+
+        state_.maximumSlice = getMaximumSliceIndex(state_.orientation, frame_.nx, frame_.ny, frame_.nz);
+
+        state_.currentSlice = std::clamp(state_.currentSlice, 0, state_.maximumSlice);
+
+        getSliceDimensions(state_.orientation, frame_.nx, frame_.ny, frame_.nz, textureWidth_, textureHeight_);
+
+        extractSlice(frame_, slice_, state_.orientation, state_.displayField, state_.currentSlice);
+        extractSlice(frame_, obstacleSlice_, state_.orientation, DisplayField::Obstacle, state_.currentSlice);
+
+        if (state_.displayField == DisplayField::VelocityMagnitude)
+        {
+            state_.minimumValue = 0.0f;
+            state_.maximumValue = 0.35f;
+        }
+        else
+        {
+            state_.minimumValue = -0.35f;
+            state_.maximumValue = 0.35f;
+        }
+
+        const std::size_t expectedSliceSize = static_cast<std::size_t>(textureWidth_) * static_cast<std::size_t>(textureHeight_);
+
+        if (slice_.size() != expectedSliceSize)
+        {
+            throw std::runtime_error("Extracted slice has an unexpected size.");
+        }
+
+        if (state_.automaticColorScaling && !slice_.empty())
+        {
+            const auto [minimumIterator, maximumIterator] = std::minmax_element(slice_.begin(), slice_.end());
+
+            state_.automaticMinimumValue = *minimumIterator;
+            state_.automaticMaximumValue = *maximumIterator;
+        }
+
+        state_.finalMinimum = state_.automaticColorScaling ? state_.automaticMinimumValue : state_.minimumValue;
+        state_.finalMaximum = state_.automaticColorScaling ? state_.automaticMaximumValue : state_.maximumValue;
+
+        texture_->update(textureWidth_, textureHeight_, slice_);
+        obstacleTexture_->update(textureWidth_, textureHeight_, obstacleSlice_);
     }
-    else
+
+    if (arrowsChanged)
     {
-        state_.minimumValue = -0.35f;
-        state_.maximumValue = 0.35f;
+        if (state_.showVelocityArrows)
+        {
+            arrowVertices_ = buildVelocityArrowVertices(frame_, state_.orientation, state_.currentSlice,
+                                                        state_.arrowStride, state_.arrowLengthScale);
+        }
+        else
+        {
+            arrowVertices_.clear();
+        }
+
+        arrowRenderer_->update(arrowVertices_);
     }
-
-    const std::size_t expectedSliceSize = static_cast<std::size_t>(textureWidth_) * static_cast<std::size_t>(textureHeight_);
-
-    if (slice_.size() != expectedSliceSize)
-    {
-        throw std::runtime_error("Extracted slice has an unexpected size.");
-    }
-
-    if (state_.automaticColorScaling && !slice_.empty())
-    {
-        const auto [minimumIterator, maximumIterator] = std::minmax_element(slice_.begin(), slice_.end());
-
-        state_.automaticMinimumValue = *minimumIterator;
-        state_.automaticMaximumValue = *maximumIterator;
-    }
-
-    state_.finalMinimum = state_.automaticColorScaling ? state_.automaticMinimumValue : state_.minimumValue;
-    state_.finalMaximum = state_.automaticColorScaling ? state_.automaticMaximumValue : state_.maximumValue;
-
-    texture_->update(textureWidth_, textureHeight_, slice_);
-    obstacleTexture_->update(textureWidth_, textureHeight_, obstacleSlice_);
 
     state_.dataChanged = false;
     state_.sliceChanged = false;
     state_.orientationChanged = false;
     state_.fieldChanged = false;
+    state_.arrowsChanged = false;
 }
 
 void Application::render()
@@ -277,6 +302,12 @@ void Application::render()
     obstacleTexture_->bind(1);
 
     renderer_->drawQuad();
+
+    if (state_.showVelocityArrows)
+    {
+        arrowShader_->use();
+        arrowRenderer_->draw();
+    }
 }
 
 void Application::run()
@@ -296,7 +327,6 @@ void Application::run()
         userInterface_->render();
 
         glfwSwapBuffers(window_);
-
     }
 }
 

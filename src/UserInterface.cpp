@@ -2,7 +2,6 @@
 
 #include "SliceExtractor.hpp"
 
-#include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 
@@ -148,22 +147,41 @@ void UserInterface::drawControls(VisualizationState &state, const SimulationFram
 
     ImGui::Text("Active range: %.6e to %.6e", state.finalMinimum, state.finalMaximum);
 
-    if (state.displayField == DisplayField::VelocityMagnitude) 
+    if (state.displayField == DisplayField::VelocityMagnitude)
     {
         const ImU32 colors[] = {
-        ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.5f, 1.0f)),
-        ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.5f, 1.0f, 1.0f)),
-        ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 1.0f, 0.5f, 1.0f)),
-        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 0.0f, 1.0f)),
-        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 0.0f, 0.0f, 1.0f))};
+            ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.5f, 1.0f)),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.5f, 1.0f, 1.0f)),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 1.0f, 0.5f, 1.0f)),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 0.0f, 1.0f)),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 0.0f, 0.0f, 1.0f))};
         drawColorBar(state.finalMinimum, state.finalMaximum, colors, 5);
-    } 
-    else {
+    }
+    else
+    {
         const ImU32 colors[] = {
-        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 0.0f, 0.0f, 1.0f)),
-        ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f)),
-        ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 1.0f, 1.0f))};
+            ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 0.0f, 0.0f, 1.0f)),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(1.0f, 1.0f, 1.0f, 1.0f)),
+            ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 1.0f, 1.0f))};
         drawColorBar(state.finalMinimum, state.finalMaximum, colors, 3);
+    }
+
+    if (ImGui::Checkbox("Show velocity arrows", &state.showVelocityArrows))
+    {
+        state.arrowsChanged = true;
+    }
+
+    if (state.showVelocityArrows)
+    {
+        if (ImGui::SliderInt("Arrow spacing", &state.arrowStride, 2, 20))
+        {
+            state.arrowsChanged = true;
+        }
+
+        if (ImGui::SliderFloat("Arrow length", &state.arrowLengthScale, 0.1f, 1.0f))
+        {
+            state.arrowsChanged = true;
+        }
     }
 
     ImGui::End();

@@ -22,12 +22,19 @@ Renderer::Renderer() {
 }
 
 Renderer::~Renderer() {
-    glDeleteVertexArrays(1, &vao_);
-    glDeleteBuffers(1, &vbo_);
+    if (vbo_ != 0) 
+    {
+        glDeleteVertexArrays(1, &vao_);
+    }
+    if (vao_ != 0)
+    {
+        glDeleteBuffers(1, &vbo_);
+    }
 }
 
 void Renderer::drawQuad() const {
 
     glBindVertexArray(vao_);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
 }

@@ -3,6 +3,8 @@
 #include "SimulationFrame.hpp"
 #include "VisualizationState.hpp"
 
+#include <imgui.h>
+
 struct GLFWwindow;
 
 class UserInterface

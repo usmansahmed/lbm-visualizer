@@ -7,6 +7,7 @@
 #include "VisualizationState.hpp"
 #include "VtiReader.hpp"
 #include "UserInterface.hpp"
+#include "VelocityArrowRenderer.hpp"
 
 #include <GLFW/glfw3.h>
 
@@ -45,6 +46,10 @@ private:
     std::unique_ptr<ScalarTexture> texture_;
     std::unique_ptr<ScalarTexture> obstacleTexture_;
     std::unique_ptr<UserInterface> userInterface_;
+
+    std::unique_ptr<Shader> arrowShader_;
+    std::unique_ptr<VelocityArrowRenderer> arrowRenderer_;
+    std::vector<float> arrowVertices_;
 
     SimulationFrame frame_;
     VisualizationState state_;

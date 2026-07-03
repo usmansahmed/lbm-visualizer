@@ -142,6 +142,8 @@ add_executable(lbm_visualizer
     src/Renderer.cpp
     src/UserInterface.cpp
     src/Application.cpp
+    src/VelocityArrowBuilder.cpp
+    src/VelocityArrowRenderer.cpp
     include/SimulationFrame.hpp
     include/VisualizationState.hpp
 )

@@ -26,4 +26,9 @@ struct VisualizationState
     float automaticMaximumValue;
     float finalMinimum;
     float finalMaximum;
+
+    bool showVelocityArrows = true;
+    int arrowStride = 8;
+    float arrowLengthScale = 0.75f;
+    bool arrowsChanged = true;
 };
