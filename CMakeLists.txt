@@ -135,22 +135,34 @@ target_link_libraries(imgui
 
 add_executable(lbm_visualizer
     src/main.cpp
-    src/VtiReader.cpp
-    src/SliceExtractor.cpp
-    src/Shader.cpp
-    src/ScalarTexture.cpp
-    src/Renderer.cpp
-    src/UserInterface.cpp
+    src/opengl/SliceExtractor.cpp
+    src/opengl/Shader.cpp
+    src/opengl/ScalarTexture.cpp
+    src/opengl/Renderer.cpp
+    src/opengl/UserInterface.cpp
     src/Application.cpp
-    src/VelocityArrowBuilder.cpp
-    src/VelocityArrowRenderer.cpp
-    include/SimulationFrame.hpp
-    include/VisualizationState.hpp
+    src/opengl/VelocityArrowBuilder.cpp
+    src/opengl/VelocityArrowRenderer.cpp
+    src/opengl/ProbeOverlayBuilder.cpp
+    src/opengl/PBOBuffer.cpp
+    src/cuda/LbmSolver.cpp
+    src/cuda/collision.cu
+    src/cuda/init.cu
+    src/cuda/macro.cu
+    src/cuda/streaming.cu
+    src/cuda/boundary.cu
+    src/cuda/visualize.cu
+    include/opengl/SimulationFrame.hpp
+    include/opengl/VisualizationState.hpp
+    include/opengl/ProbeResult.hpp
+    include/opengl/VelocitySlice.hpp
 )
 
 target_include_directories(lbm_visualizer
     PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/opengl
+		${CMAKE_CURRENT_SOURCE_DIR}/include/cuda
 )
 
 target_link_libraries(lbm_visualizer
@@ -166,6 +178,7 @@ target_link_libraries(lbm_visualizer
 
 set_target_properties(lbm_visualizer PROPERTIES
     CUDA_SEPARABLE_COMPILATION ON
+    CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
 if(MSVC)

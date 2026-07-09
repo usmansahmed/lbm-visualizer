@@ -4,18 +4,8 @@
 
 namespace
 {
-    std::size_t index3D(
-        int x,
-        int y,
-        int z,
-        int nx,
-        int ny)
-    {
-        return static_cast<std::size_t>(x) + static_cast<std::size_t>(nx) * (static_cast<std::size_t>(y) + static_cast<std::size_t>(ny) * z);
-    }
-
     void extractXYSlice(
-        const SimulationFrame &frame,
+        const VisualizationState &frame,
         std::vector<float> &slice,
         DisplayField field,
         int fixedZ)
@@ -40,7 +30,7 @@ namespace
     }
 
     void extractYZSlice(
-        const SimulationFrame &frame,
+        const VisualizationState &frame,
         std::vector<float> &slice,
         DisplayField field,
         int fixedX)
@@ -65,7 +55,7 @@ namespace
     }
 
     void extractXZSlice(
-        const SimulationFrame &frame,
+        const VisualizationState &frame,
         std::vector<float> &slice,
         DisplayField field,
         int fixedY)
@@ -138,7 +128,7 @@ int getMaximumSliceIndex(
     return 0;
 }
 
-void extractSlice(const SimulationFrame &frame, std::vector<float> &output, SliceOrientation orientation, DisplayField field, int sliceIndex)
+void extractSlice(const VisualizationState &frame, std::vector<float> &output, SliceOrientation orientation, DisplayField field, int sliceIndex)
 {
 
     if (orientation == SliceOrientation::XY)
@@ -155,37 +145,18 @@ void extractSlice(const SimulationFrame &frame, std::vector<float> &output, Slic
     }
 }
 
-float getDisplayValue(const SimulationFrame &frame, DisplayField field, std::size_t index)
+float getDisplayValue(const VisualizationState &frame, DisplayField field, std::size_t index)
 {
     switch (field)
     {
-    case DisplayField::VelocityMagnitude:
-    {
-        const float ux = frame.velocityX[index];
-        const float uy = frame.velocityY[index];
-        const float uz = frame.velocityZ[index];
-
-        return std::sqrt(
-            ux * ux +
-            uy * uy +
-            uz * uz);
-    }
-
-    case DisplayField::VelocityX:
-        return frame.velocityX[index];
-
-    case DisplayField::VelocityY:
-        return frame.velocityY[index];
-
-    case DisplayField::VelocityZ:
-        return frame.velocityZ[index];
-
-    case DisplayField::Density:
-        return frame.density[index];
-
     case DisplayField::Obstacle:
-        return frame.obstacle[index];
+        return frame.obstacle[index] ? 1.0f : 0.0f;
     }
 
     return 0.0f;
+}
+
+std::size_t index3D(int x, int y, int z, int nx, int ny)
+{        
+    return static_cast<std::size_t>(x) + static_cast<std::size_t>(nx) * (static_cast<std::size_t>(y) + static_cast<std::size_t>(ny) * z);
 }

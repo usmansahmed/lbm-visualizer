@@ -1,12 +1,14 @@
 #pragma once
 
-#include "SimulationFrame.hpp"
+#include "VisualizationState.hpp"
 #include "SliceExtractor.hpp"
+#include "VelocitySlice.hpp"
 
 #include <vector>
 
 std::vector<float> buildVelocityArrowVertices(
-    const SimulationFrame& frame,
+    const VisualizationState& frame,
+    const VelocitySlice2D& velocities,
     SliceOrientation orientation,
     int sliceIndex,
     int stride,

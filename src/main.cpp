@@ -4,18 +4,12 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 
 int main(int argc, char* argv[])
 {
     try
     {
-        const std::filesystem::path dataDirectory =
-            argc >= 2
-                ? std::filesystem::path{argv[1]}
-                : std::filesystem::path{
-                    "simulation_output"
-                };
-
         Application application;
         application.run();
     }
@@ -25,6 +19,9 @@ int main(int argc, char* argv[])
             << "Application error: "
             << exception.what()
             << '\n';
+
+        std::cerr << "Press Enter to exit...";
+        std::cin.get();
 
         return EXIT_FAILURE;
     }

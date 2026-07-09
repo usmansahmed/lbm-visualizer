@@ -5,9 +5,11 @@
 #include "Shader.hpp"
 #include "SimulationFrame.hpp"
 #include "VisualizationState.hpp"
-#include "VtiReader.hpp"
 #include "UserInterface.hpp"
 #include "VelocityArrowRenderer.hpp"
+#include "ProbeResult.hpp"
+#include "LbmSolver.hpp"
+#include "PBOBuffer.hpp"
 
 #include <GLFW/glfw3.h>
 
@@ -33,12 +35,16 @@ private:
     void initializeOpenGL();
     void initializeResources();
 
-    void loadInitialFrame();
-    void updatePlayback();
+    void initializeSimulation();
+    void updateSimulation();
     void updateVisualization();
     void render();
     void setOrientation(SliceOrientation orientation);
     void setTextureViewport();
+    void updateProbeValues();
+    void handleProbeInput();
+    void updateProbeOverlay();
+
     GLFWwindow *window_ = nullptr;
 
     std::unique_ptr<Shader> shader_;
@@ -46,29 +52,28 @@ private:
     std::unique_ptr<ScalarTexture> texture_;
     std::unique_ptr<ScalarTexture> obstacleTexture_;
     std::unique_ptr<UserInterface> userInterface_;
+    std::unique_ptr<LbmSolver> solver_;
+    std::unique_ptr<PBOBuffer> pboBuffer_;
 
     std::unique_ptr<Shader> arrowShader_;
     std::unique_ptr<VelocityArrowRenderer> arrowRenderer_;
     std::vector<float> arrowVertices_;
 
-    SimulationFrame frame_;
     VisualizationState state_;
-
-    std::vector<float> slice_;
     std::vector<float> obstacleSlice_;
 
     int textureWidth_;
     int textureHeight_;
 
     double lastFrameTime_ = 0.0;
-
-    std::filesystem::path dataDirectory_{"assets/simulation_output"};
-    int currentFileNumber_ = 0;
-
-    int firstFileNumber_ = 0;
-    int lastFileNumber_ = 17200;
-    int fileStep_ = 400;
-
     double playbackInterval_ = 0.1;
     double lastPlaybackTime_ = 0.0;
+
+    ProbeResult probe_;
+    ViewportRectangle textureViewport_;
+    bool previousLeftMousePressed_ = false;
+
+    std::unique_ptr<VelocityArrowRenderer> probeOverlayRenderer_;
+    std::unique_ptr<Shader> probeOverlayShader_;
+    std::vector<float> probeOverlayVertices_;
 };

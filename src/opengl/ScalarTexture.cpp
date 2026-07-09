@@ -36,3 +36,13 @@ void ScalarTexture::update(int width, int height, const std::vector<float>& valu
     }
     glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, values.data());
 }
+
+void ScalarTexture::updateFromPBO(int width, int height, GLuint pbo) {
+    bind();
+    if (width != width_ || height != height_) {
+        allocate(width, height);
+    }
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width, height, GL_RED, GL_FLOAT, nullptr);
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+}

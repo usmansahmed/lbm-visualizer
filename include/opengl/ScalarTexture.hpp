@@ -15,11 +15,13 @@ public:
 
     void allocate(int width, int height);
     void update(int width, int height, const std::vector<float> &values);
+    void updateFromPBO(int width, int height, GLuint pbo);
     void bind(unsigned int textureUnit = 0) const;
 
     int width() const;
     int height() const;
 
+    
 private:
     GLuint textureId_ = 0;
     int width_ = 0;

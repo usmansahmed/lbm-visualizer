@@ -8,16 +8,6 @@
 
 namespace
 {
-    std::size_t index3D(
-        int x,
-        int y,
-        int z,
-        int nx,
-        int ny)
-    {
-        return static_cast<std::size_t>(x) + static_cast<std::size_t>(nx) * (static_cast<std::size_t>(y) + static_cast<std::size_t>(ny) * z);
-    }
-
     struct Sample
     {
         int x = 0;
@@ -33,7 +23,7 @@ namespace
         float velocityVertical = 0.0f;
     };
 
-    Sample makeSample(const SimulationFrame &frame, SliceOrientation orientation,
+    Sample makeSample(const VisualizationState &frame, const VelocitySlice2D& velocities, SliceOrientation orientation,
                       int planeX, int planeY, int sliceIndex)
     {
         Sample sample;
@@ -68,35 +58,11 @@ namespace
             }
         }
 
-        const std::size_t index = index3D(sample.x, sample.y, sample.z, frame.nx, frame.ny);
+        const std::size_t index2D = static_cast<std::size_t>(planeX) + static_cast<std::size_t>(velocities.width) * static_cast<std::size_t>(planeY);
 
-        const float ux = frame.velocityX[index];
-        const float uy = frame.velocityY[index];
-        const float uz = frame.velocityZ[index];
 
-        switch (orientation)
-        {
-            case SliceOrientation::XY:
-            {
-                sample.velocityHorizontal = ux;
-                sample.velocityVertical = uy;
-                break;
-            }
-
-            case SliceOrientation::XZ:
-            {
-                sample.velocityHorizontal = ux;
-                sample.velocityVertical = uz;
-                break;
-            }
-
-            case SliceOrientation::YZ:
-            {
-                sample.velocityHorizontal = uy;
-                sample.velocityVertical = uz;
-                break;
-            }
-        }
+        sample.velocityHorizontal = velocities.horizontal[index2D];
+        sample.velocityVertical = velocities.vertical[index2D];
 
         return sample;
     }
@@ -113,7 +79,7 @@ namespace
 
 }
 
-std::vector<float> buildVelocityArrowVertices(const SimulationFrame &frame, SliceOrientation orientation,
+std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, const VelocitySlice2D& velocities, SliceOrientation orientation,
                                               int sliceIndex, int stride, float arrowLengthScale)
 {
     if (stride <= 0)
@@ -141,10 +107,10 @@ std::vector<float> buildVelocityArrowVertices(const SimulationFrame &frame, Slic
     {
         for (int planeX = stride / 2; planeX < planeWidth; planeX += stride)
         {
-            Sample sample = makeSample(frame, orientation, planeX, planeY, sliceIndex);
+            Sample sample = makeSample(frame, velocities, orientation, planeX, planeY, sliceIndex);
             const std::size_t sourceIndex = index3D(sample.x, sample.y, sample.z, frame.nx, frame.ny);
 
-            if (!frame.obstacle.empty() && frame.obstacle[sourceIndex] > 0.5f)
+            if (frame.obstacle != nullptr && frame.obstacle[sourceIndex] > 0.5f)
             {
                 continue;
             }

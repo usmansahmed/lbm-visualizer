@@ -1,11 +1,15 @@
 #pragma once
 
-#include "SliceExtractor.hpp"
+#include "Enums.hpp"
 
 #include <cstddef>
 
 struct VisualizationState
 {
+    int nx = 254;
+    int ny = 64;
+    int nz = 16;
+
     SliceOrientation orientation = SliceOrientation::XZ;
     DisplayField displayField = DisplayField::VelocityMagnitude;
     int currentSlice = 0;
@@ -21,7 +25,7 @@ struct VisualizationState
     bool automaticColorScaling = false;
 
     float minimumValue = 0.0f;
-    float maximumValue = 0.35f;
+    float maximumValue = 0.003f;
     float automaticMinimumValue;
     float automaticMaximumValue;
     float finalMinimum;
@@ -31,4 +35,6 @@ struct VisualizationState
     int arrowStride = 8;
     float arrowLengthScale = 0.75f;
     bool arrowsChanged = true;
+
+    const bool* obstacle = nullptr;
 };

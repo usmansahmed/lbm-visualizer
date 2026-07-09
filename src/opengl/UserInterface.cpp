@@ -1,5 +1,4 @@
 #include "UserInterface.hpp"
-
 #include "SliceExtractor.hpp"
 
 #include <backends/imgui_impl_glfw.h>
@@ -60,7 +59,7 @@ void UserInterface::render()
         ImGui::GetDrawData());
 }
 
-void UserInterface::drawControls(VisualizationState &state, const SimulationFrame &frame)
+void UserInterface::drawControls(VisualizationState &state, const ProbeResult& probe)
 {
     static const char *orientationNames[] = {
         "XY",
@@ -90,7 +89,7 @@ void UserInterface::drawControls(VisualizationState &state, const SimulationFram
     if (ImGui::Combo("Orientation", &selectedOrientation, orientationNames, IM_ARRAYSIZE(orientationNames)))
     {
         state.orientation = static_cast<SliceOrientation>(selectedOrientation);
-        state.maximumSlice = getMaximumSliceIndex(state.orientation, frame.nx, frame.ny, frame.nz);
+        state.maximumSlice = getMaximumSliceIndex(state.orientation, state.nx, state.ny, state.nz);
         state.currentSlice = state.maximumSlice / 2;
         state.orientationChanged = true;
         state.sliceChanged = true;
@@ -112,7 +111,7 @@ void UserInterface::drawControls(VisualizationState &state, const SimulationFram
         }
     }
 
-    ImGui::SameLine();
+     
 
     if (ImGui::Button(state.playing ? "Pause" : "Resume"))
     {
@@ -132,7 +131,7 @@ void UserInterface::drawControls(VisualizationState &state, const SimulationFram
 
     ImGui::Separator();
 
-    ImGui::Text("Grid dimensions: %d x %d x %d", frame.nx, frame.ny, frame.nz);
+    ImGui::Text("Grid dimensions: %d x %d x %d", state.nx, state.ny, state.nz);
 
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
 
@@ -140,8 +139,8 @@ void UserInterface::drawControls(VisualizationState &state, const SimulationFram
 
     if (!state.automaticColorScaling)
     {
-        ImGui::DragFloatRange2("Color range", &state.finalMinimum, &state.finalMaximum,
-                               0.001f, -10.0f, 10.0f, "Min: %.4f", "Max: %.4f",
+        ImGui::DragFloatRange2("Color range", &state.minimumValue, &state.maximumValue,
+                               0.005f, -10.0f, 10.0f, "Min: %.6f", "Max: %.6f",
                                ImGuiSliderFlags_AlwaysClamp);
     }
 
@@ -182,6 +181,22 @@ void UserInterface::drawControls(VisualizationState &state, const SimulationFram
         {
             state.arrowsChanged = true;
         }
+    }
+
+    ImGui::SeparatorText("Probe");
+    if (!probe.valid)
+    {
+        ImGui::TextDisabled("Click the simulation to inspect a cell.");
+    }
+    else
+    {
+        ImGui::Text("Cell: (%d, %d, %d)",probe.x,probe.y,probe.z);
+        ImGui::Text("Density: %.6e",probe.density);
+        ImGui::Text("Velocity X: %.6e",probe.velocityX);
+        ImGui::Text("Velocity Y: %.6e",probe.velocityY);
+        ImGui::Text("Velocity Z: %.6e",probe.velocityZ);
+        ImGui::Text("Speed: %.6e",probe.speed);
+        ImGui::Text("Cell type: %s", probe.obstacle? "Obstacle" : "Fluid");
     }
 
     ImGui::End();

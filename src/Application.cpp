@@ -1,5 +1,6 @@
 #include "Application.hpp"
 #include "VelocityArrowBuilder.hpp"
+#include "ProbeOverlayBuilder.hpp"
 
 #include <cstddef>
 #include <sstream>
@@ -15,6 +16,20 @@
 #include <filesystem>
 #include <iomanip>
 
+#include <cuda_runtime.h>
+#include <cuda_gl_interop.h>
+
+namespace
+{
+    void checkCuda(cudaError_t error, const char *message)
+    {
+        if (error != cudaSuccess)
+        {
+            throw std::runtime_error(std::string(message) + ": " + cudaGetErrorString(error));
+        }
+    }
+}
+
 Application::Application()
 {
     try
@@ -22,13 +37,19 @@ Application::Application()
         initializeWindow();
         initializeOpenGL();
         initializeResources();
-        loadInitialFrame();
+        initializeSimulation();
     }
     catch (...)
     {
+        probeOverlayRenderer_.reset();
+        probeOverlayShader_.reset();
+        pboBuffer_.reset();
+        userInterface_.reset();
         texture_.reset();
         obstacleTexture_.reset();
         renderer_.reset();
+        arrowRenderer_.reset();
+        arrowShader_.reset();
         shader_.reset();
 
         if (window_ != nullptr)
@@ -50,6 +71,9 @@ Application::~Application()
         glfwMakeContextCurrent(window_);
     }
 
+    probeOverlayRenderer_.reset();
+    probeOverlayShader_.reset();
+    pboBuffer_.reset();
     userInterface_.reset();
     texture_.reset();
     obstacleTexture_.reset();
@@ -120,11 +144,14 @@ void Application::initializeResources()
 {
     shader_ = std::make_unique<Shader>("shaders/quad.vert", "shaders/quad.frag");
     arrowShader_ = std::make_unique<Shader>("shaders/velocity_arrows.vert", "shaders/velocity_arrows.frag");
+    probeOverlayShader_ = std::make_unique<Shader>("shaders/probe_overlay.vert", "shaders/probe_overlay.frag");
 
     renderer_ = std::make_unique<Renderer>();
     arrowRenderer_ = std::make_unique<VelocityArrowRenderer>();
+    probeOverlayRenderer_ = std::make_unique<VelocityArrowRenderer>();
 
     texture_ = std::make_unique<ScalarTexture>();
+    pboBuffer_ = std::make_unique<PBOBuffer>();
 
     obstacleTexture_ = std::make_unique<ScalarTexture>();
 
@@ -136,24 +163,18 @@ void Application::initializeResources()
     shader_->setInt("obstacleTexture", 1);
 }
 
-void Application::loadInitialFrame()
+void Application::initializeSimulation()
 {
-    currentFileNumber_ = firstFileNumber_;
+    solver_ = std::make_unique<LbmSolver>();
+    state_.nx = 256;
+    state_.ny = 64;
+    state_.nz = 16;
+    state_.obstacle = solver_->getObstacle();
 
-    const std::filesystem::path filePath = makeVtiFilePath(dataDirectory_, currentFileNumber_);
-
-    frame_ = loadVtiFile(filePath);
-
-    if (frame_.nx <= 0 || frame_.ny <= 0 || frame_.nz <= 0)
-    {
-        throw std::runtime_error("The initial frame has invalid dimensions.");
-    }
-
-    state_.orientation = SliceOrientation::XZ;
-
+    state_.orientation = SliceOrientation::XY;
     state_.displayField = DisplayField::VelocityMagnitude;
 
-    state_.maximumSlice = getMaximumSliceIndex(state_.orientation, frame_.nx, frame_.ny, frame_.nz);
+    state_.maximumSlice = getMaximumSliceIndex(state_.orientation, state_.nx, state_.ny, state_.nz);
 
     state_.currentSlice = state_.maximumSlice / 2;
 
@@ -165,7 +186,7 @@ void Application::loadInitialFrame()
     lastPlaybackTime_ = glfwGetTime();
 }
 
-void Application::updatePlayback()
+void Application::updateSimulation()
 {
     if (!state_.playing)
         return;
@@ -173,38 +194,14 @@ void Application::updatePlayback()
     const double currentTime = glfwGetTime();
 
     if (currentTime - lastPlaybackTime_ < playbackInterval_)
-    {
         return;
-    }
 
-    int nextFileNumber = currentFileNumber_ + fileStep_;
+    solver_->step();
 
-    if (nextFileNumber > lastFileNumber_)
-    {
-        nextFileNumber = firstFileNumber_;
-    }
-
-    const std::filesystem::path nextFilePath = makeVtiFilePath(dataDirectory_, nextFileNumber);
-    if (!std::filesystem::exists(nextFilePath))
-    {
-        std::cerr << "File does not exist: " << nextFilePath << '\n';
-        state_.playing = false;
-        return;
-    }
-
-    SimulationFrame nextFrame = loadVtiFile(nextFilePath);
-
-    if (nextFrame.nx != frame_.nx || nextFrame.ny != frame_.ny || nextFrame.nz != frame_.nz)
-    {
-        throw std::runtime_error("Grid dimensions changed in file: " + nextFilePath.string());
-    }
-
-    frame_ = std::move(nextFrame);
-
-    currentFileNumber_ = nextFileNumber;
+    checkCuda(cudaPeekAtLastError(), "solver step kernel launch");
+    checkCuda(cudaDeviceSynchronize(), "solver step kernel execution");
 
     state_.dataChanged = true;
-
     lastPlaybackTime_ = currentTime;
 }
 
@@ -218,46 +215,52 @@ void Application::updateVisualization()
 
     if (visualizationChanged)
     {
-
-        state_.maximumSlice = getMaximumSliceIndex(state_.orientation, frame_.nx, frame_.ny, frame_.nz);
+        state_.maximumSlice = getMaximumSliceIndex(state_.orientation, state_.nx, state_.ny, state_.nz);
 
         state_.currentSlice = std::clamp(state_.currentSlice, 0, state_.maximumSlice);
 
-        getSliceDimensions(state_.orientation, frame_.nx, frame_.ny, frame_.nz, textureWidth_, textureHeight_);
+        getSliceDimensions(state_.orientation, state_.nx, state_.ny, state_.nz, textureWidth_, textureHeight_);
 
-        extractSlice(frame_, slice_, state_.orientation, state_.displayField, state_.currentSlice);
-        extractSlice(frame_, obstacleSlice_, state_.orientation, DisplayField::Obstacle, state_.currentSlice);
+        float *pboDevicePointer = pboBuffer_->mapPBOToCuda(textureWidth_, textureHeight_);
 
-        if (state_.displayField == DisplayField::VelocityMagnitude)
+        solver_->prepareData(pboDevicePointer, state_.displayField, state_.orientation, state_.currentSlice, textureWidth_, textureHeight_, state_.showVelocityArrows);
+
+        checkCuda(cudaGetLastError(), "prepareData kernel launch");
+        checkCuda(cudaDeviceSynchronize(), "prepareData kernel execution");
+        pboBuffer_->unmapPBOFromCuda();
+
+        // extractSlice(frame_, slice_, state_.orientation, state_.displayField, state_.currentSlice);
+        extractSlice(state_, obstacleSlice_, state_.orientation, DisplayField::Obstacle, state_.currentSlice);
+
+        // if (state_.displayField == DisplayField::VelocityMagnitude)
+        // {
+        //     state_.minimumValue = 0.0f;
+        //     state_.maximumValue = 0.35f;
+        // }
+        // else
+        // {
+        //     state_.minimumValue = -0.35f;
+        //     state_.maximumValue = 0.35f;
+        // }
+
+        // const std::size_t expectedSliceSize = static_cast<std::size_t>(textureWidth_) * static_cast<std::size_t>(textureHeight_);
+
+        // if (slice_.size() != expectedSliceSize)
+        // {
+        //     throw std::runtime_error("Extracted slice has an unexpected size.");
+        // }
+
+        if (state_.automaticColorScaling)
         {
-            state_.minimumValue = 0.0f;
-            state_.maximumValue = 0.35f;
-        }
-        else
-        {
-            state_.minimumValue = -0.35f;
-            state_.maximumValue = 0.35f;
-        }
-
-        const std::size_t expectedSliceSize = static_cast<std::size_t>(textureWidth_) * static_cast<std::size_t>(textureHeight_);
-
-        if (slice_.size() != expectedSliceSize)
-        {
-            throw std::runtime_error("Extracted slice has an unexpected size.");
-        }
-
-        if (state_.automaticColorScaling && !slice_.empty())
-        {
-            const auto [minimumIterator, maximumIterator] = std::minmax_element(slice_.begin(), slice_.end());
-
-            state_.automaticMinimumValue = *minimumIterator;
-            state_.automaticMaximumValue = *maximumIterator;
+            const auto [min, max] = solver_->getValueRange();
+            state_.automaticMinimumValue = min;
+            state_.automaticMaximumValue = max;
         }
 
         state_.finalMinimum = state_.automaticColorScaling ? state_.automaticMinimumValue : state_.minimumValue;
         state_.finalMaximum = state_.automaticColorScaling ? state_.automaticMaximumValue : state_.maximumValue;
 
-        texture_->update(textureWidth_, textureHeight_, slice_);
+        texture_->updateFromPBO(textureWidth_, textureHeight_, pboBuffer_->getID());
         obstacleTexture_->update(textureWidth_, textureHeight_, obstacleSlice_);
     }
 
@@ -265,7 +268,8 @@ void Application::updateVisualization()
     {
         if (state_.showVelocityArrows)
         {
-            arrowVertices_ = buildVelocityArrowVertices(frame_, state_.orientation, state_.currentSlice,
+            const VelocitySlice2D slice = solver_->getVelocitySlice2D();
+            arrowVertices_ = buildVelocityArrowVertices(state_, slice, state_.orientation, state_.currentSlice,
                                                         state_.arrowStride, state_.arrowLengthScale);
         }
         else
@@ -274,6 +278,10 @@ void Application::updateVisualization()
         }
 
         arrowRenderer_->update(arrowVertices_);
+    }
+    if (state_.dataChanged && probe_.valid)
+    {
+        updateProbeValues();
     }
 
     state_.dataChanged = false;
@@ -308,20 +316,29 @@ void Application::render()
         arrowShader_->use();
         arrowRenderer_->draw();
     }
+
+    if (!probeOverlayVertices_.empty())
+    {
+        probeOverlayShader_->use();
+        probeOverlayRenderer_->draw();
+    }
 }
 
 void Application::run()
 {
     while (glfwWindowShouldClose(window_) == GLFW_FALSE)
     {
+
         glfwPollEvents();
-
         userInterface_->beginFrame();
-        userInterface_->drawControls(state_, frame_);
+        userInterface_->drawControls(state_, probe_);
 
-        updatePlayback();
+        updateSimulation();
         updateVisualization();
+
         setTextureViewport();
+        handleProbeInput();
+        updateProbeOverlay();
         render();
 
         userInterface_->render();
@@ -438,7 +455,7 @@ void Application::setOrientation(SliceOrientation orientation)
 
     state_.orientation = orientation;
 
-    state_.maximumSlice = getMaximumSliceIndex(state_.orientation, frame_.nx, frame_.ny, frame_.nz);
+    state_.maximumSlice = getMaximumSliceIndex(state_.orientation, state_.nx, state_.ny, state_.nz);
 
     state_.currentSlice = state_.maximumSlice / 2;
 
@@ -482,5 +499,140 @@ void Application::setTextureViewport()
         viewportY = (framebufferHeight - viewportHeight) / 2;
     }
 
-    glViewport(viewportX, viewportY, viewportWidth, viewportHeight);
+    textureViewport_.x = viewportX;
+    textureViewport_.y = viewportY;
+    textureViewport_.width = viewportWidth;
+    textureViewport_.height = viewportHeight;
+
+    glViewport(textureViewport_.x, textureViewport_.y, textureViewport_.width, textureViewport_.height);
+}
+
+void Application::updateProbeValues()
+{
+    if (!probe_.valid)
+        return;
+
+    if (probe_.x < 0 || probe_.x >= state_.nx ||
+        probe_.y < 0 || probe_.y >= state_.ny ||
+        probe_.z < 0 || probe_.z >= state_.nz)
+    {
+        probe_.valid = false;
+        return;
+    }
+
+    const std::size_t index = index3D(probe_.x, probe_.y, probe_.z, state_.nx, state_.ny);
+
+    solver_->readProbeCell(probe_, index);
+}
+
+void Application::handleProbeInput()
+{
+    const bool leftMousePressed = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+
+    const bool justPressed = leftMousePressed && !previousLeftMousePressed_;
+
+    previousLeftMousePressed_ = leftMousePressed;
+
+    if (!justPressed)
+        return;
+
+    if (ImGui::GetIO().WantCaptureMouse)
+        return;
+
+    if (textureViewport_.width <= 0 ||
+        textureViewport_.height <= 0 ||
+        textureWidth_ <= 0 ||
+        textureHeight_ <= 0)
+    {
+        return;
+    }
+
+    double cursorX = 0.0;
+    double cursorY = 0.0;
+
+    glfwGetCursorPos(window_, &cursorX, &cursorY);
+
+    int windowWidth = 0;
+    int windowHeight = 0;
+
+    glfwGetWindowSize(window_, &windowWidth, &windowHeight);
+
+    int framebufferWidth = 0;
+    int framebufferHeight = 0;
+
+    glfwGetFramebufferSize(window_, &framebufferWidth, &framebufferHeight);
+
+    if (windowWidth <= 0 || windowHeight <= 0)
+    {
+        return;
+    }
+
+    const double scaleX = static_cast<double>(framebufferWidth) / static_cast<double>(windowWidth);
+
+    const double scaleY = static_cast<double>(framebufferHeight) / static_cast<double>(windowHeight);
+
+    const double framebufferX = cursorX * scaleX;
+
+    const double framebufferY = (static_cast<double>(windowHeight) - cursorY) * scaleY;
+
+    const double localX = framebufferX - static_cast<double>(textureViewport_.x);
+
+    const double localY = framebufferY - static_cast<double>(textureViewport_.y);
+
+    if (localX < 0.0 || localY < 0.0 ||
+        localX >= textureViewport_.width ||
+        localY >= textureViewport_.height)
+    {
+        return;
+    }
+
+    const double u = localX / static_cast<double>(textureViewport_.width);
+    const double v = localY / static_cast<double>(textureViewport_.height);
+
+    int planeX = static_cast<int>(u * textureWidth_);
+    int planeY = static_cast<int>(v * textureHeight_);
+
+    planeX = std::clamp(planeX, 0, textureWidth_ - 1);
+    planeY = std::clamp(planeY, 0, textureHeight_ - 1);
+
+    switch (state_.orientation)
+    {
+    case SliceOrientation::XY:
+    {
+        probe_.x = planeX;
+        probe_.y = planeY;
+        probe_.z = state_.currentSlice;
+        break;
+    }
+
+    case SliceOrientation::XZ:
+    {
+        probe_.x = planeX;
+        probe_.y = state_.currentSlice;
+        probe_.z = planeY;
+        break;
+    }
+
+    case SliceOrientation::YZ:
+    {
+        probe_.x = state_.currentSlice;
+        probe_.y = planeX;
+        probe_.z = planeY;
+        break;
+    }
+    }
+
+    probe_.valid = true;
+
+    updateProbeValues();
+}
+
+void Application::updateProbeOverlay()
+{
+    int planeWidth = 0;
+    int planeHeight = 0;
+
+    getSliceDimensions(state_.orientation, state_.nx, state_.ny, state_.nz, planeWidth, planeHeight);
+    probeOverlayVertices_ = buildProbeOverlayVertices(probe_, state_.orientation, state_.currentSlice, planeWidth, planeHeight);
+    probeOverlayRenderer_->update(probeOverlayVertices_);
 }
