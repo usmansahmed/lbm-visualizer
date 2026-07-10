@@ -65,24 +65,6 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glm)
 
 # ---------------------------
-# TinyXML2
-# ---------------------------
-
-add_library(tinyxml2 STATIC
-    external/tinyxml2/tinyxml2.cpp
-)
-
-target_include_directories(tinyxml2
-    PUBLIC
-        external/tinyxml2
-)
-
-target_compile_features(tinyxml2
-    PUBLIC
-        cxx_std_17
-)
-
-# ---------------------------
 # System libraries
 # ---------------------------
 
@@ -167,7 +149,6 @@ target_link_libraries(lbm_visualizer
         OpenGL::GL
         CUDA::cudart
         glm::glm
-		tinyxml2
         imgui
 )
 

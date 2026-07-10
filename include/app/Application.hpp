@@ -36,13 +36,17 @@ private:
 
     void updateSimulation();
     void updateVisualization();
-    void render();
+    void renderSimulation();
     void setOrientation(SliceOrientation orientation);
-    void setTextureViewport();
+    bool updateTextureViewport();
+    void applyTextureViewport();
     void updateProbeValues();
     void handleProbeInput();
     void updateProbeOverlay();
     void restartSimulation();
+    void drawMainDockSpace();
+    void drawControlsWindow();
+    void drawSimulationViewWindow();
 
     GLFWwindow *window_ = nullptr;
 
@@ -70,6 +74,7 @@ private:
 
     ProbeResult probe_;
     ViewportRectangle textureViewport_;
+    ViewportRectangle simulationPanelViewport_;
     bool previousLeftMousePressed_ = false;
 
     std::unique_ptr<VelocityArrowRenderer> probeOverlayRenderer_;
@@ -78,4 +83,8 @@ private:
 
     SimulationConfig pendingConfig_;
     SimulationConfig activeConfig_;
+
+    ImVec2 simulationViewPosition_{0.0f, 0.0f};
+    ImVec2 simulationViewSize_{1.0f, 1.0f};
+    bool simulationViewHovered_ = false;
 };

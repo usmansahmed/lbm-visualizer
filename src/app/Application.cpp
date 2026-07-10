@@ -201,12 +201,10 @@ void Application::updateVisualization()
 
         state_.currentSlice = std::clamp(state_.currentSlice, 0, state_.maximumSlice);
 
-     
         getSliceDimensions(state_.orientation, state_.nx, state_.ny, state_.nz, textureWidth_, textureHeight_);
 
         float *pboDevicePointer = pboBuffer_->mapPBOToCuda(textureWidth_, textureHeight_);
 
-     
         solver_->prepareVisualizationSlice(pboDevicePointer, state_.displayField, state_.orientation, state_.currentSlice, textureWidth_, textureHeight_, state_.showVelocityArrows, state_.automaticColorScaling);
 
         checkCuda(cudaGetLastError(), "prepareData kernel launch");
@@ -222,13 +220,11 @@ void Application::updateVisualization()
             state_.automaticMaximumValue = max;
         }
 
-        
         state_.finalMinimum = state_.automaticColorScaling ? state_.automaticMinimumValue : state_.minimumValue;
         state_.finalMaximum = state_.automaticColorScaling ? state_.automaticMaximumValue : state_.maximumValue;
 
         texture_->updateFromPBO(textureWidth_, textureHeight_, pboBuffer_->getID());
         obstacleTexture_->update(textureWidth_, textureHeight_, obstacleSlice_);
-        
     }
 
     if (arrowsChanged)
@@ -258,10 +254,8 @@ void Application::updateVisualization()
     state_.arrowsChanged = false;
 }
 
-void Application::render()
+void Application::renderSimulation()
 {
-    glClear(GL_COLOR_BUFFER_BIT);
-
     shader_->use();
 
     shader_->setInt("fieldTexture", 0);
@@ -295,7 +289,6 @@ void Application::run()
 {
     while (glfwWindowShouldClose(window_) == GLFW_FALSE)
     {
-
         glfwPollEvents();
 
         if (state_.restartRequested)
@@ -303,19 +296,39 @@ void Application::run()
             restartSimulation();
             state_.restartRequested = false;
         }
-        userInterface_->beginFrame();
-        userInterface_->drawControls(state_, pendingConfig_, probe_);
 
         updateSimulation();
         updateVisualization();
 
-        setTextureViewport();
-        handleProbeInput();
-        updateProbeOverlay();
-        render();
+        int framebufferWidth = 0;
+        int framebufferHeight = 0;
 
+        glfwGetFramebufferSize(window_, &framebufferWidth, &framebufferHeight);
+        glDisable(GL_SCISSOR_TEST);
+        glViewport(0, 0, framebufferWidth, framebufferHeight);
+        glClearColor(0.08f, 0.08f, 0.08f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        userInterface_->beginFrame();
+
+        drawMainDockSpace();
+        drawSimulationViewWindow();
+        drawControlsWindow();
+
+        const bool validTextureViewport = updateTextureViewport();
+
+        glDisable(GL_SCISSOR_TEST);
+        glViewport(0, 0, framebufferWidth, framebufferHeight);
         userInterface_->render();
 
+        if (validTextureViewport)
+        {
+            handleProbeInput();
+            updateProbeOverlay();
+            applyTextureViewport();
+            renderSimulation();
+            glDisable(GL_SCISSOR_TEST);
+        }
         glfwSwapBuffers(window_);
     }
 }
@@ -436,46 +449,88 @@ void Application::setOrientation(SliceOrientation orientation)
     state_.sliceChanged = true;
 }
 
-void Application::setTextureViewport()
+bool Application::updateTextureViewport()
 {
+    if (textureWidth_ <= 0 || textureHeight_ <= 0 || simulationViewSize_.x <= 1.0f || simulationViewSize_.y <= 1.0f)
+    {
+        return false;
+    }
+
+    int windowWidth = 0;
+    int windowHeight = 0;
+
     int framebufferWidth = 0;
     int framebufferHeight = 0;
 
-    glfwGetFramebufferSize(
-        window_,
-        &framebufferWidth,
-        &framebufferHeight);
-    glViewport(
-        0,
-        0,
-        framebufferWidth,
-        framebufferHeight);
+    glfwGetWindowSize(window_, &windowWidth, &windowHeight);
+    glfwGetFramebufferSize(window_, &framebufferWidth, &framebufferHeight);
 
-    const float windowAspect = static_cast<float>(framebufferWidth) / static_cast<float>(framebufferHeight);
+    if (windowWidth <= 0 || windowHeight <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0)
+    {
+        return false;
+    }
+
+    const float scaleX = static_cast<float>(framebufferWidth) / static_cast<float>(windowWidth);
+
+    const float scaleY = static_cast<float>(framebufferHeight) / static_cast<float>(windowHeight);
+
+    const ImGuiViewport *imguiViewport = ImGui::GetMainViewport();
+
+    const float localPanelX = simulationViewPosition_.x - imguiViewport->Pos.x;
+    const float localPanelY = simulationViewPosition_.y - imguiViewport->Pos.y;
+
+    const int panelX = static_cast<int>(localPanelX * scaleX);
+    const int panelY = static_cast<int>((static_cast<float>(windowHeight) - localPanelY - simulationViewSize_.y) * scaleY);
+
+    const int panelWidth = static_cast<int>(simulationViewSize_.x * scaleX);
+    const int panelHeight = static_cast<int>(simulationViewSize_.y * scaleY);
+
+    if (panelWidth <= 0 || panelHeight <= 0)
+    {
+        return false;
+    }
+
+    simulationPanelViewport_.x = panelX;
+    simulationPanelViewport_.y = panelY;
+    simulationPanelViewport_.width = panelWidth;
+    simulationPanelViewport_.height = panelHeight;
+
+    const float panelAspect = static_cast<float>(panelWidth) / static_cast<float>(panelHeight);
     const float textureAspect = static_cast<float>(textureWidth_) / static_cast<float>(textureHeight_);
 
-    int viewportWidth = framebufferWidth;
-    int viewportHeight = framebufferHeight;
-    int viewportX = 0;
-    int viewportY = 0;
+    int viewportWidth = panelWidth;
+    int viewportHeight = panelHeight;
 
-    if (windowAspect > textureAspect)
+    int viewportX = panelX;
+    int viewportY = panelY;
+
+    if (panelAspect > textureAspect)
     {
-        viewportHeight = framebufferHeight;
-        viewportWidth = static_cast<int>(framebufferHeight * textureAspect);
-        viewportX = (framebufferWidth - viewportWidth) / 2;
+        viewportHeight = panelHeight;
+        viewportWidth = static_cast<int>(static_cast<float>(panelHeight) * textureAspect);
+
+        viewportX = panelX + (panelWidth - viewportWidth) / 2;
     }
     else
     {
-        viewportWidth = framebufferWidth;
-        viewportHeight = static_cast<int>(framebufferWidth / textureAspect);
-        viewportY = (framebufferHeight - viewportHeight) / 2;
+        viewportWidth = panelWidth;
+        viewportHeight = static_cast<int>(static_cast<float>(panelWidth) / textureAspect);
+        viewportY = panelY + (panelHeight - viewportHeight) / 2;
     }
 
     textureViewport_.x = viewportX;
     textureViewport_.y = viewportY;
     textureViewport_.width = viewportWidth;
     textureViewport_.height = viewportHeight;
+
+    return true;
+}
+
+void Application::applyTextureViewport()
+{
+    glEnable(GL_SCISSOR_TEST);
+
+    glScissor(simulationPanelViewport_.x, simulationPanelViewport_.y, simulationPanelViewport_.width, simulationPanelViewport_.height);
 
     glViewport(textureViewport_.x, textureViewport_.y, textureViewport_.width, textureViewport_.height);
 }
@@ -509,7 +564,7 @@ void Application::handleProbeInput()
     if (!justPressed)
         return;
 
-    if (ImGui::GetIO().WantCaptureMouse)
+    if (!simulationViewHovered_)
         return;
 
     if (textureViewport_.width <= 0 ||
@@ -640,4 +695,76 @@ void Application::restartSimulation()
     state_.orientationChanged = true;
     state_.fieldChanged = true;
     state_.arrowsChanged = true;
+}
+
+void Application::drawMainDockSpace()
+{
+    ImGuiWindowFlags windowFlags =
+        ImGuiWindowFlags_MenuBar |
+        ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoBringToFrontOnFocus |
+        ImGuiWindowFlags_NoNavFocus;
+
+    const ImGuiViewport *viewport =
+        ImGui::GetMainViewport();
+
+    ImGui::SetNextWindowPos(viewport->WorkPos);
+    ImGui::SetNextWindowSize(viewport->WorkSize);
+    ImGui::SetNextWindowViewport(viewport->ID);
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+
+    ImGui::Begin(
+        "Main DockSpace Window",
+        nullptr,
+        windowFlags);
+
+    ImGui::PopStyleVar(2);
+
+    ImGuiID dockspaceId =
+        ImGui::GetID("MainDockSpace");
+
+    ImGui::DockSpace(
+        dockspaceId,
+        ImVec2(0.0f, 0.0f),
+        ImGuiDockNodeFlags_None);
+
+    ImGui::End();
+}
+
+void Application::drawControlsWindow()
+{
+    ImGui::Begin("Controls");
+    userInterface_->drawControls(state_, pendingConfig_, probe_);
+    ImGui::End();
+}
+
+void Application::drawSimulationViewWindow()
+{
+    ImGui::Begin("Simulation View");
+
+    simulationViewPosition_ = ImGui::GetCursorScreenPos();
+
+    simulationViewSize_ = ImGui::GetContentRegionAvail();
+
+    if (simulationViewSize_.x < 1.0f)
+    {
+        simulationViewSize_.x = 1.0f;
+    }
+
+    if (simulationViewSize_.y < 1.0f)
+    {
+        simulationViewSize_.y = 1.0f;
+    }
+
+    ImGui::InvisibleButton("Simulation Canvas", simulationViewSize_, ImGuiButtonFlags_MouseButtonLeft);
+
+    simulationViewHovered_ = ImGui::IsItemHovered();
+
+    ImGui::End();
 }

@@ -22,6 +22,9 @@ UserInterface::UserInterface(GLFWwindow *window)
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+
     if (!ImGui_ImplGlfw_InitForOpenGL(window, true))
     {
         ImGui::DestroyContext();
@@ -73,8 +76,6 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
         "Velocity Z",
         "Density",
         "Obstacle"};
-
-    ImGui::Begin("LBM Controls");
 
     ImGui::SeparatorText("Simulation Setup");
 
@@ -246,8 +247,6 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
         ImGui::Text("Speed: %.6e", probe.speed);
         ImGui::Text("Cell type: %s", probe.obstacle ? "Obstacle" : "Fluid");
     }
-
-    ImGui::End();
 }
 
 void UserInterface::drawColorBar(float minimumValue, float maximumValue, const ImU32 colors[], int colorCount)
