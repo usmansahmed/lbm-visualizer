@@ -145,6 +145,7 @@ add_executable(lbm_visualizer
     src/opengl/VelocityArrowRenderer.cpp
     src/opengl/ProbeOverlayBuilder.cpp
     src/opengl/PBOBuffer.cpp
+    src/opengl/ObstacleFactory.cpp
     src/cuda/LbmSolver.cpp
     src/cuda/collision.cu
     src/cuda/init.cu
@@ -152,10 +153,6 @@ add_executable(lbm_visualizer
     src/cuda/streaming.cu
     src/cuda/boundary.cu
     src/cuda/visualize.cu
-    include/opengl/SimulationFrame.hpp
-    include/opengl/VisualizationState.hpp
-    include/opengl/ProbeResult.hpp
-    include/opengl/VelocitySlice.hpp
 )
 
 target_include_directories(lbm_visualizer

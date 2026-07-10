@@ -5,7 +5,7 @@
 // __constant__ int D3Q19_OPP[19] = {0, 2,1, 4,3, 6,5, 8,7, 10,9, 12,11, 14,13, 16,15, 18,17};
 
 __global__ void streamingKernel(const float* f_old, float* f_new,
-                                const bool* solid, 
+                                const unsigned char*solid, 
                                 const int Nx, const int Ny, const int Nz){
     int x = threadIdx.x + blockDim.x * blockIdx.x;
     int y = threadIdx.y + blockDim.y * blockIdx.y;

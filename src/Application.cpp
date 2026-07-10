@@ -1,6 +1,7 @@
 #include "Application.hpp"
 #include "VelocityArrowBuilder.hpp"
 #include "ProbeOverlayBuilder.hpp"
+#include "ObstacleFactory.hpp"
 
 #include <cstddef>
 #include <sstream>
@@ -37,7 +38,7 @@ Application::Application()
         initializeWindow();
         initializeOpenGL();
         initializeResources();
-        initializeSimulation();
+        restartSimulation();
     }
     catch (...)
     {
@@ -163,28 +164,28 @@ void Application::initializeResources()
     shader_->setInt("obstacleTexture", 1);
 }
 
-void Application::initializeSimulation()
-{
-    solver_ = std::make_unique<LbmSolver>();
-    state_.nx = 256;
-    state_.ny = 64;
-    state_.nz = 16;
-    state_.obstacle = solver_->getObstacle();
+// void Application::initializeSimulation()
+// {
+//     solver_ = std::make_unique<LbmSolver>();
+//     state_.nx = 256;
+//     state_.ny = 64;
+//     state_.nz = 16;
+//     state_.obstacle = solver_->getObstacle();
 
-    state_.orientation = SliceOrientation::XY;
-    state_.displayField = DisplayField::VelocityMagnitude;
+//     state_.orientation = SliceOrientation::XY;
+//     state_.displayField = DisplayField::VelocityMagnitude;
 
-    state_.maximumSlice = getMaximumSliceIndex(state_.orientation, state_.nx, state_.ny, state_.nz);
+//     state_.maximumSlice = getMaximumSliceIndex(state_.orientation, state_.nx, state_.ny, state_.nz);
 
-    state_.currentSlice = state_.maximumSlice / 2;
+//     state_.currentSlice = state_.maximumSlice / 2;
 
-    state_.dataChanged = true;
-    state_.sliceChanged = true;
-    state_.orientationChanged = true;
-    state_.fieldChanged = true;
+//     state_.dataChanged = true;
+//     state_.sliceChanged = true;
+//     state_.orientationChanged = true;
+//     state_.fieldChanged = true;
 
-    lastPlaybackTime_ = glfwGetTime();
-}
+//     lastPlaybackTime_ = glfwGetTime();
+// }
 
 void Application::updateSimulation()
 {
@@ -219,16 +220,19 @@ void Application::updateVisualization()
 
         state_.currentSlice = std::clamp(state_.currentSlice, 0, state_.maximumSlice);
 
+     
         getSliceDimensions(state_.orientation, state_.nx, state_.ny, state_.nz, textureWidth_, textureHeight_);
 
         float *pboDevicePointer = pboBuffer_->mapPBOToCuda(textureWidth_, textureHeight_);
 
+     
         solver_->prepareData(pboDevicePointer, state_.displayField, state_.orientation, state_.currentSlice, textureWidth_, textureHeight_, state_.showVelocityArrows);
 
         checkCuda(cudaGetLastError(), "prepareData kernel launch");
         checkCuda(cudaDeviceSynchronize(), "prepareData kernel execution");
         pboBuffer_->unmapPBOFromCuda();
 
+     
         // extractSlice(frame_, slice_, state_.orientation, state_.displayField, state_.currentSlice);
         extractSlice(state_, obstacleSlice_, state_.orientation, DisplayField::Obstacle, state_.currentSlice);
 
@@ -250,6 +254,7 @@ void Application::updateVisualization()
         //     throw std::runtime_error("Extracted slice has an unexpected size.");
         // }
 
+        
         if (state_.automaticColorScaling)
         {
             const auto [min, max] = solver_->getValueRange();
@@ -257,11 +262,13 @@ void Application::updateVisualization()
             state_.automaticMaximumValue = max;
         }
 
+        
         state_.finalMinimum = state_.automaticColorScaling ? state_.automaticMinimumValue : state_.minimumValue;
         state_.finalMaximum = state_.automaticColorScaling ? state_.automaticMaximumValue : state_.maximumValue;
 
         texture_->updateFromPBO(textureWidth_, textureHeight_, pboBuffer_->getID());
         obstacleTexture_->update(textureWidth_, textureHeight_, obstacleSlice_);
+        
     }
 
     if (arrowsChanged)
@@ -330,8 +337,14 @@ void Application::run()
     {
 
         glfwPollEvents();
+
+        if (state_.restartRequested)
+        {
+            restartSimulation();
+            state_.restartRequested = false;
+        }
         userInterface_->beginFrame();
-        userInterface_->drawControls(state_, probe_);
+        userInterface_->drawControls(state_, pendingConfig_, probe_);
 
         updateSimulation();
         updateVisualization();
@@ -635,4 +648,36 @@ void Application::updateProbeOverlay()
     getSliceDimensions(state_.orientation, state_.nx, state_.ny, state_.nz, planeWidth, planeHeight);
     probeOverlayVertices_ = buildProbeOverlayVertices(probe_, state_.orientation, state_.currentSlice, planeWidth, planeHeight);
     probeOverlayRenderer_->update(probeOverlayVertices_);
+}
+
+void Application::restartSimulation()
+{
+    state_.playing = false;
+
+    activeConfig_ = pendingConfig_;
+
+    auto obstacle = createObstacleMask(activeConfig_);
+
+    solver_ = std::make_unique<LbmSolver>(activeConfig_, obstacle);
+
+    state_.nx = activeConfig_.nx;
+    state_.ny = activeConfig_.ny;
+    state_.nz = activeConfig_.nz;
+    state_.obstacle = obstacle;
+
+    state_.orientation = SliceOrientation::XY;
+    state_.displayField = DisplayField::VelocityMagnitude;
+
+    state_.maximumSlice = getMaximumSliceIndex(state_.orientation, state_.nx, state_.ny, state_.nz);
+    state_.currentSlice = state_.maximumSlice / 2;
+
+    lastPlaybackTime_ = glfwGetTime();
+
+    probe_.valid = false;
+
+    state_.dataChanged = true;
+    state_.sliceChanged = true;
+    state_.orientationChanged = true;
+    state_.fieldChanged = true;
+    state_.arrowsChanged = true;
 }

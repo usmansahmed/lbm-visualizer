@@ -3,6 +3,7 @@
 #include "Enums.hpp"
 
 #include <cstddef>
+#include <vector>
 
 struct VisualizationState
 {
@@ -23,6 +24,7 @@ struct VisualizationState
     bool orientationChanged = true;
     bool fieldChanged = true;
     bool automaticColorScaling = false;
+    bool restartRequested = false;
 
     float minimumValue = 0.0f;
     float maximumValue = 0.003f;
@@ -36,5 +38,5 @@ struct VisualizationState
     float arrowLengthScale = 0.75f;
     bool arrowsChanged = true;
 
-    const bool* obstacle = nullptr;
+    std::vector<unsigned char> obstacle;
 };

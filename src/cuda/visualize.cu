@@ -103,7 +103,7 @@ __global__ void writeSliceToPboKernel(Grid fields, float *scalarOut, SliceOrient
             }
         }
 
-        const bool isObstacle = fields.d_solid[index3D];
+        const bool isObstacle = fields.d_solid[index3D] != 0;
 
         if (isObstacle)
         {

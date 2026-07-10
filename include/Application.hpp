@@ -10,6 +10,7 @@
 #include "ProbeResult.hpp"
 #include "LbmSolver.hpp"
 #include "PBOBuffer.hpp"
+#include "SimulationConfig.hpp"
 
 #include <GLFW/glfw3.h>
 
@@ -35,7 +36,7 @@ private:
     void initializeOpenGL();
     void initializeResources();
 
-    void initializeSimulation();
+    // void initializeSimulation();
     void updateSimulation();
     void updateVisualization();
     void render();
@@ -44,6 +45,7 @@ private:
     void updateProbeValues();
     void handleProbeInput();
     void updateProbeOverlay();
+    void restartSimulation();
 
     GLFWwindow *window_ = nullptr;
 
@@ -76,4 +78,7 @@ private:
     std::unique_ptr<VelocityArrowRenderer> probeOverlayRenderer_;
     std::unique_ptr<Shader> probeOverlayShader_;
     std::vector<float> probeOverlayVertices_;
+
+    SimulationConfig pendingConfig_;
+    SimulationConfig activeConfig_;
 };

@@ -110,7 +110,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
             Sample sample = makeSample(frame, velocities, orientation, planeX, planeY, sliceIndex);
             const std::size_t sourceIndex = index3D(sample.x, sample.y, sample.z, frame.nx, frame.ny);
 
-            if (frame.obstacle != nullptr && frame.obstacle[sourceIndex] > 0.5f)
+            if (!frame.obstacle.empty() && frame.obstacle[sourceIndex] != 0)
             {
                 continue;
             }

@@ -59,7 +59,7 @@ void UserInterface::render()
         ImGui::GetDrawData());
 }
 
-void UserInterface::drawControls(VisualizationState &state, const ProbeResult& probe)
+void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pendingConfig, const ProbeResult &probe)
 {
     static const char *orientationNames[] = {
         "XY",
@@ -75,6 +75,56 @@ void UserInterface::drawControls(VisualizationState &state, const ProbeResult& p
         "Obstacle"};
 
     ImGui::Begin("LBM Controls");
+
+    ImGui::SeparatorText("Simulation Setup");
+
+    ImGui::InputInt("Nx", &pendingConfig.nx);
+    ImGui::InputInt("Ny", &pendingConfig.ny);
+    ImGui::InputInt("Nz", &pendingConfig.nz);
+
+    pendingConfig.nx = std::max(8, pendingConfig.nx);
+    pendingConfig.ny = std::max(8, pendingConfig.ny);
+    pendingConfig.nz = std::max(1, pendingConfig.nz);
+
+    ImGui::SliderFloat("Omega", &pendingConfig.omega, 0.8f, 1.8f);
+
+    const float tau = 1.0f / pendingConfig.omega;
+    const float viscosity = (1.0f / 3.0f) * (tau - 0.5f);
+
+    ImGui::Text("tau = %.4f", tau);
+    ImGui::Text("nu  = %.6f", viscosity);
+
+    ImGui::SliderFloat("Inlet velocity", &pendingConfig.inletVelocity, 0.0f, 0.1f);
+
+    const char *obstacleNames[] =
+        {
+            "None",
+            "Single block",
+            "Two blocks",
+            "Single cylinder",
+            "Two cylinders"};
+
+    int preset =
+        static_cast<int>(pendingConfig.obstaclePreset);
+
+    if (ImGui::Combo(
+            "Obstacle preset",
+            &preset,
+            obstacleNames,
+            IM_ARRAYSIZE(obstacleNames)))
+    {
+        pendingConfig.obstaclePreset =
+            static_cast<ObstaclePreset>(preset);
+    }
+
+    ImGui::SliderInt("Obstacle size", &pendingConfig.obstacleSize, 2, 32);
+
+    ImGui::SliderInt("Obstacle radius", &pendingConfig.obstacleRadius, 2, 32);
+
+    if (ImGui::Button("Apply / Restart Simulation"))
+    {
+        state.restartRequested = true;
+    }
 
     int selectedDisplayField = static_cast<int>(state.displayField);
 
@@ -110,8 +160,6 @@ void UserInterface::drawControls(VisualizationState &state, const ProbeResult& p
             state.sliceChanged = true;
         }
     }
-
-     
 
     if (ImGui::Button(state.playing ? "Pause" : "Resume"))
     {
@@ -190,13 +238,13 @@ void UserInterface::drawControls(VisualizationState &state, const ProbeResult& p
     }
     else
     {
-        ImGui::Text("Cell: (%d, %d, %d)",probe.x,probe.y,probe.z);
-        ImGui::Text("Density: %.6e",probe.density);
-        ImGui::Text("Velocity X: %.6e",probe.velocityX);
-        ImGui::Text("Velocity Y: %.6e",probe.velocityY);
-        ImGui::Text("Velocity Z: %.6e",probe.velocityZ);
-        ImGui::Text("Speed: %.6e",probe.speed);
-        ImGui::Text("Cell type: %s", probe.obstacle? "Obstacle" : "Fluid");
+        ImGui::Text("Cell: (%d, %d, %d)", probe.x, probe.y, probe.z);
+        ImGui::Text("Density: %.6e", probe.density);
+        ImGui::Text("Velocity X: %.6e", probe.velocityX);
+        ImGui::Text("Velocity Y: %.6e", probe.velocityY);
+        ImGui::Text("Velocity Z: %.6e", probe.velocityZ);
+        ImGui::Text("Speed: %.6e", probe.speed);
+        ImGui::Text("Cell type: %s", probe.obstacle ? "Obstacle" : "Fluid");
     }
 
     ImGui::End();

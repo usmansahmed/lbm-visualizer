@@ -7,6 +7,7 @@
 #include <string>
 #include <stdexcept>
 #include <cmath>
+#include <iostream>
 
 extern void launchInitKernel(Grid &grid, dim3 blocks, dim3 threads);
 extern void launchCollisionKernel(Grid &grid, float omega, dim3 blocks, dim3 threads);
@@ -29,22 +30,19 @@ namespace
     }
 }
 
-LbmSolver::LbmSolver()
+LbmSolver::LbmSolver(const SimulationConfig &config, const std::vector<unsigned char> &obstacle)
 {
-    grid.Nx = 256;
-    grid.Ny = 64;
-    grid.Nz = 16;
+    grid.Nx = config.nx;
+    grid.Ny = config.ny;
+    grid.Nz = config.nz;
     grid.N = grid.Nx * grid.Ny * grid.Nz;
     grid.d_arrowHorizontal_ = nullptr;
     grid.d_arrowVertical_ = nullptr;
-
-    threads = dim3(8, 8, 4);
-    blocks = dim3((grid.Nx + threads.x - 1) / threads.x,
-                  (grid.Ny + threads.y - 1) / threads.y,
-                  (grid.Nz + threads.z - 1) / threads.z);
+    omega_ = config.omega;
 
     size_t f_size = sizeof(float) * grid.N * Q;
     size_t macro_size = sizeof(float) * grid.N;
+    const std::size_t solid_size = sizeof(unsigned char) * static_cast<std::size_t>(grid.N);
 
     cudaMalloc(&grid.d_f_old, f_size);
     cudaMalloc(&grid.d_f_new, f_size);
@@ -52,29 +50,26 @@ LbmSolver::LbmSolver()
     cudaMalloc(&grid.d_ux, macro_size);
     cudaMalloc(&grid.d_uy, macro_size);
     cudaMalloc(&grid.d_uz, macro_size);
-    cudaMalloc(&grid.d_solid, macro_size);
+    cudaMalloc(&grid.d_solid, solid_size);
 
-    grid.h_solid = (bool *)malloc(macro_size);
+    grid.h_solid = static_cast<unsigned char *>(std::malloc(solid_size));
 
-    std::fill_n(grid.h_solid, grid.N, 0);
-
-    int size = 8;
-    int cx = grid.Nx / 4;
-    int cy = grid.Ny / 2;
-
-    for (int z = 0; z < grid.Nz; ++z)
+    if (obstacle.size() != static_cast<std::size_t>(grid.N))
     {
-        for (int y = cy - size / 2; y < cy + size / 2; ++y)
-        {
-            for (int x = cx - size / 2; x < cx + size / 2; ++x)
-            {
-                grid.h_solid[x + y * grid.Nx + z * grid.Nx * grid.Ny] = 1;
-            }
-        }
+        throw std::runtime_error("Obstacle mask size does not match grid size.");
     }
 
-    cudaMemcpy(grid.d_solid, grid.h_solid, macro_size, cudaMemcpyHostToDevice);
+    std::copy(obstacle.begin(), obstacle.end(), grid.h_solid);
+    cudaMemcpy(grid.d_solid, grid.h_solid, solid_size, cudaMemcpyHostToDevice);
+
+    threads = dim3(8, 8, 4);
+    blocks = dim3((grid.Nx + threads.x - 1) / threads.x, (grid.Ny + threads.y - 1) / threads.y, (grid.Nz + threads.z - 1) / threads.z);
+
     launchInitKernel(grid, blocks, threads);
+
+    std::vector<unsigned char> solidCheck(grid.N);
+
+    checkCuda(cudaMemcpy(solidCheck.data(), grid.d_solid, static_cast<std::size_t>(grid.N) * sizeof(unsigned char), cudaMemcpyDeviceToHost), "copy d_solid back to host");
 }
 
 LbmSolver::~LbmSolver()
@@ -94,7 +89,7 @@ LbmSolver::~LbmSolver()
 void LbmSolver::step()
 {
     // 1. Physics Engine Steps
-    launchCollisionKernel(grid, omega, blocks, threads);
+    launchCollisionKernel(grid, omega_, blocks, threads);
     launchStreamingKernel(grid, blocks, threads);
     // Thread and Block configuration for the 2D slice boundary at x=0
     // dim3 boundary_threads(1, 16, 4);
@@ -105,7 +100,7 @@ void LbmSolver::step()
     std::swap(grid.d_f_old, grid.d_f_new);
 }
 
-const bool *LbmSolver::getObstacle() const
+const unsigned char *LbmSolver::getObstacle() const
 {
     return grid.h_solid;
 }
@@ -126,6 +121,7 @@ void LbmSolver::prepareData(float *mappedPixels, DisplayField field, SliceOrient
     const std::size_t numberOfBlocks = static_cast<std::size_t>(gridSize.x) * static_cast<std::size_t>(gridSize.y);
     ensureScaleBufferCapacity(numberOfBlocks);
 
+    cudaGetLastError();
     launchprepareDataKernel(grid, mappedPixels,
                             field, orientation, sliceIndex,
                             planeWidth, planeHeight, writeArrowSlice,

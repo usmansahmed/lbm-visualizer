@@ -16,8 +16,8 @@ struct Grid{
     float* d_blockMaximums = nullptr;
     float* d_blockMinimums = nullptr;
 
-    bool* d_solid;
-    bool* h_solid;
+    unsigned char* h_solid = nullptr;
+    unsigned char* d_solid = nullptr;
 
 };
 

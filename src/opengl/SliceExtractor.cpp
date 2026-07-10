@@ -150,7 +150,7 @@ float getDisplayValue(const VisualizationState &frame, DisplayField field, std::
     switch (field)
     {
     case DisplayField::Obstacle:
-        return frame.obstacle[index] ? 1.0f : 0.0f;
+        return frame.obstacle[index] != 0 ? 1.0f : 0.0f;
     }
 
     return 0.0f;

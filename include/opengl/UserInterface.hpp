@@ -3,6 +3,7 @@
 #include "SimulationFrame.hpp"
 #include "VisualizationState.hpp"
 #include "ProbeResult.hpp"
+#include "SimulationConfig.hpp"
 
 #include <imgui.h>
 
@@ -18,7 +19,7 @@ public:
     UserInterface& operator=(const UserInterface&) = delete;
 
     void beginFrame();
-    void drawControls(VisualizationState& state, const ProbeResult& probe);
+    void drawControls(VisualizationState& state, SimulationConfig &pendingConfig ,const ProbeResult& probe);
     void render();
 
 private:

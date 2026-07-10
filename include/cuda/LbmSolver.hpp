@@ -4,20 +4,21 @@
 #include "Enums.hpp"
 #include "VelocitySlice.hpp"
 #include "ProbeResult.hpp"
+#include "SimulationConfig.hpp"
 
 #include <utility>
 
 class LbmSolver
 {
 public:
-    LbmSolver();
+    LbmSolver(const SimulationConfig &config, const std::vector<unsigned char> &obstacle);
     ~LbmSolver();
 
     void step();
     void prepareData(float *mappedPixels, DisplayField field, SliceOrientation orientation,
                      int sliceIndex, int planeWidth, int planeHeight, bool writeArrowSlice);
 
-    const bool *getObstacle() const;
+    const unsigned char *getObstacle() const;
     void ensureArrowSliceCapacity(std::size_t requiredCount);
     void ensureScaleBufferCapacity(std::size_t requiredBlockCount);
     const VelocitySlice2D &getVelocitySlice2D() const;
@@ -33,4 +34,5 @@ private:
     std::size_t scaleBlockCapacity_ = 0;
     std::vector<float> h_blockMinimums;
     std::vector<float> h_blockMaximums;
+    float omega_ = 1.0f;
 };
