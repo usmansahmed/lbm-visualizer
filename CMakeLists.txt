@@ -135,31 +135,29 @@ target_link_libraries(imgui
 
 add_executable(lbm_visualizer
     src/main.cpp
-    src/opengl/SliceExtractor.cpp
-    src/opengl/Shader.cpp
-    src/opengl/ScalarTexture.cpp
-    src/opengl/Renderer.cpp
-    src/opengl/UserInterface.cpp
-    src/Application.cpp
-    src/opengl/VelocityArrowBuilder.cpp
-    src/opengl/VelocityArrowRenderer.cpp
-    src/opengl/ProbeOverlayBuilder.cpp
-    src/opengl/PBOBuffer.cpp
-    src/opengl/ObstacleFactory.cpp
-    src/cuda/LbmSolver.cpp
-    src/cuda/collision.cu
-    src/cuda/init.cu
-    src/cuda/macro.cu
-    src/cuda/streaming.cu
-    src/cuda/boundary.cu
-    src/cuda/visualize.cu
+	src/app/Application.cpp
+    src/app/SliceExtractor.cpp
+	src/ui/UserInterface.cpp
+    src/rendering/Shader.cpp
+    src/rendering/ScalarTexture.cpp
+    src/rendering/Renderer.cpp
+    src/rendering/VelocityArrowRenderer.cpp
+    src/rendering/PBOBuffer.cpp
+	src/geometry/VelocityArrowBuilder.cpp
+	src/geometry/ProbeOverlayBuilder.cpp
+    src/geometry/ObstacleFactory.cpp
+    src/lbm/LbmSolver.cpp
+    src/lbm/kernels/collision.cu
+    src/lbm/kernels/init.cu
+    src/lbm/kernels/macro.cu
+    src/lbm/kernels/streaming.cu
+    src/lbm/kernels/boundary.cu
+    src/lbm/kernels/visualize.cu
 )
 
 target_include_directories(lbm_visualizer
     PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/opengl
-		${CMAKE_CURRENT_SOURCE_DIR}/include/cuda
 )
 
 target_link_libraries(lbm_visualizer
