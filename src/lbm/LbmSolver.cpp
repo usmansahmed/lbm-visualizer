@@ -210,6 +210,17 @@ const VelocitySlice2D &LbmSolver::getVelocitySlice2D() const
 
 void LbmSolver::readProbeCell(ProbeResult &result, std::size_t index) const
 {
+    result.obstacle = gridData_.h_solid != nullptr && gridData_.h_solid[index] != 0;
+    if (result.obstacle)
+    {
+        result.density = 0.0f;
+        result.velocityX = 0.0f;
+        result.velocityY = 0.0f;
+        result.velocityZ = 0.0f;
+        result.speed = 0.0f;
+        return;
+    }
+
     checkCuda(cudaMemcpy(&result.density, gridData_.d_rho + index, sizeof(float), cudaMemcpyDeviceToHost), "copy probe density");
     checkCuda(cudaMemcpy(&result.velocityX, gridData_.d_ux + index, sizeof(float), cudaMemcpyDeviceToHost), "copy probe velocityX");
     checkCuda(cudaMemcpy(&result.velocityY, gridData_.d_uy + index, sizeof(float), cudaMemcpyDeviceToHost), "copy probe velocityY");
@@ -217,9 +228,7 @@ void LbmSolver::readProbeCell(ProbeResult &result, std::size_t index) const
 
     result.speed = std::sqrt(result.velocityX * result.velocityX +
                              result.velocityY * result.velocityY +
-                             result.velocityZ * result.velocityZ);
-
-    result.obstacle = gridData_.h_solid != nullptr && gridData_.h_solid[index];
+                             result.velocityZ * result.velocityZ);  
 }
 
 std::pair<float, float> LbmSolver::getValueRange() const

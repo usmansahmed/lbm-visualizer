@@ -6,7 +6,13 @@ enum class ObstaclePreset
     SingleBlock,
     TwoBlocks,
     SingleCylinder,
-    TwoCylinders
+    TwoCylinders,
+    CylinderArray,
+    Sphere,
+    TwoSpheres,
+    BackwardFacingStep,
+    WallWithSlit,
+    RandomPorousBlock
 };
 
 struct SimulationConfig
@@ -23,4 +29,13 @@ struct SimulationConfig
 
     int obstacleSize = 8;
     int obstacleRadius = 5;
+
+    int obstacleSpacingX = 24;
+    int obstacleSpacingY = 16;
+
+    int stepHeight = 24;
+    int slitHeight = 20;
+
+    float porousSolidProbability = 0.15f;
+    unsigned int porousRandomSeed = 12345u;
 };
