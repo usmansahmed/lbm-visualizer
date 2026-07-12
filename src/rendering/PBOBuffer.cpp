@@ -8,6 +8,7 @@ namespace
 {
     void checkCuda(cudaError_t error, const char *message)
     {
+        // Convert CUDA errors into exceptions with a useful message.
         if (error != cudaSuccess)
         {
             throw std::runtime_error(std::string(message) + ": " + cudaGetErrorString(error));
@@ -17,11 +18,13 @@ namespace
 
 PBOBuffer::PBOBuffer()
 {
+    // Create the OpenGL pixel buffer object.
     glGenBuffers(1, &pbo_);
 }
 
 PBOBuffer::~PBOBuffer()
 {
+    // CUDA must release the graphics resource before the OpenGL buffer is deleted.
     if (cudaPboResource_ != nullptr)
     {
         cudaError_t error =
@@ -48,6 +51,7 @@ void PBOBuffer::resize(int width, int height)
     width_ = width;
     height_ = height;
 
+    // Allocate enough GPU-side OpenGL buffer storage for one float per pixel.
     const std::size_t byteSize = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * sizeof(float);
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, pbo_);
     glBufferData(GL_PIXEL_UNPACK_BUFFER, static_cast<GLsizeiptr>(byteSize), nullptr, GL_STREAM_DRAW);
@@ -56,11 +60,13 @@ void PBOBuffer::resize(int width, int height)
 
 void PBOBuffer::RegisterWithCuda()
 {
+    // Register the OpenGL buffer so CUDA can write into it directly.
     checkCuda(cudaGraphicsGLRegisterBuffer(&cudaPboResource_, pbo_, cudaGraphicsRegisterFlagsWriteDiscard), "Failed to register PBO with CUDA");
 }
 
 void PBOBuffer::UnregisterWithCuda()
 {
+    // Unregister before resizing or destroying the OpenGL buffer.
     if (cudaPboResource_ != nullptr)
     {
         checkCuda(cudaGraphicsUnregisterResource(cudaPboResource_), "Failed to unregister CUDA PBO resource");
@@ -75,6 +81,7 @@ float *PBOBuffer::mapPBOToCuda(int width, int height)
         throw std::runtime_error("Cannot map PBO with invalid dimensions.");
     }
 
+    // Recreate the PBO/CUDA registration if the slice size has changed.
     if (width != width_ || height != height_ || cudaPboResource_ == nullptr)
     {
         UnregisterWithCuda();
@@ -82,6 +89,7 @@ float *PBOBuffer::mapPBOToCuda(int width, int height)
         RegisterWithCuda();
     }
 
+    // Map the registered OpenGL buffer and get the CUDA device pointer.
     checkCuda(cudaGraphicsMapResources(1, &cudaPboResource_, 0), "Failed to map CUDA PBO resource");
     std::size_t mappedSize = 0;
 
@@ -93,6 +101,7 @@ float *PBOBuffer::mapPBOToCuda(int width, int height)
     {
         throw std::runtime_error("Mapped PBO size is smaller than expected.");
     }
+
     return data_;
 }
 
@@ -103,6 +112,7 @@ void PBOBuffer::unmapPBOFromCuda()
         return;
     }
 
+    // Unmap before OpenGL reads from the PBO.
     checkCuda(cudaGraphicsUnmapResources(1, &cudaPboResource_, 0), "Failed to unmap CUDA PBO resource");
 
     data_ = nullptr;

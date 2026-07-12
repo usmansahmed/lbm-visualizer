@@ -7,6 +7,7 @@
 Shader::Shader(const std::string &vertexPath, const std::string &fragmentPath)
 {
 
+    // Load vertex and fragment shader source files from disk.
     std::ifstream vertexfile(vertexPath);
     std::ifstream fragmentfile(fragmentPath);
 
@@ -20,6 +21,7 @@ Shader::Shader(const std::string &vertexPath, const std::string &fragmentPath)
     }
 
     std::stringstream buffer;
+
     buffer << vertexfile.rdbuf();
     const std::string vertexShaderSource = buffer.str();
 
@@ -31,42 +33,50 @@ Shader::Shader(const std::string &vertexPath, const std::string &fragmentPath)
 
     const char *rawSource = vertexShaderSource.c_str();
 
+    // Compile the vertex shader.
     GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vertexShader, 1, &rawSource, nullptr);
     glCompileShader(vertexShader);
 
     rawSource = fragmentShaderSource.c_str();
 
+    // Compile the fragment shader.
     GLuint fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fragmentShader, 1, &rawSource, nullptr);
     glCompileShader(fragmentShader);
 
+    // Link both shaders into one OpenGL shader program.
     programId_ = glCreateProgram();
     glAttachShader(programId_, vertexShader);
     glAttachShader(programId_, fragmentShader);
 
     glLinkProgram(programId_);
 
+    // The shader objects are no longer needed after linking.
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
 }
 
 Shader::~Shader()
 {
+    // Delete the linked shader program.
     glDeleteProgram(programId_);
 }
 
 void Shader::use() const
 {
+    // Make this shader program active for the next draw calls.
     glUseProgram(programId_);
 }
 
 void Shader::setInt(const std::string &name, int value) const
 {
+    // Set an integer uniform, for example a texture unit index.
     glUniform1i(glGetUniformLocation(programId_, name.c_str()), value);
 }
 
 void Shader::setFloat(const std::string &name, float value) const
 {
+    // Set a float uniform, for example the visualization color range.
     glUniform1f(glGetUniformLocation(programId_, name.c_str()), value);
 }

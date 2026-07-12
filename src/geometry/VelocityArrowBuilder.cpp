@@ -31,6 +31,7 @@ namespace
         sample.planeX = planeX;
         sample.planeY = planeY;
 
+        // Convert the 2D slice coordinate back to the matching 3D grid cell.
         switch (orientation)
         {
             case SliceOrientation::XY:
@@ -58,6 +59,7 @@ namespace
             }
         }
 
+        // VelocitySlice2D is already a 2D slice, so use the 2D index here.
         const std::size_t index2D = static_cast<std::size_t>(planeX) + static_cast<std::size_t>(velocities.width) * static_cast<std::size_t>(planeY);
 
 
@@ -70,6 +72,7 @@ namespace
     void appendLine(
         std::vector<float> &vertices, float x1, float y1, float x2, float y2)
     {
+        // Store one line segment as two 2D vertices.
         vertices.push_back(x1);
         vertices.push_back(y1);
 
@@ -103,6 +106,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
 
     float maximumMagnitude = 0.0f;
 
+    // Sample the slice on a regular grid instead of drawing one arrow per cell.
     for (int planeY = stride / 2; planeY < planeHeight; planeY += stride)
     {
         for (int planeX = stride / 2; planeX < planeWidth; planeX += stride)
@@ -110,6 +114,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
             Sample sample = makeSample(frame, velocities, orientation, planeX, planeY, sliceIndex);
             const std::size_t sourceIndex = index3D(sample.x, sample.y, sample.z, frame.nx, frame.ny);
 
+            // Do not draw arrows inside obstacle cells.
             if (!frame.obstacle.empty() && frame.obstacle[sourceIndex] != 0)
             {
                 continue;
@@ -128,6 +133,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
 
     constexpr float nearZero = 1.0e-8f;
 
+    // If all in-plane velocities are almost zero, there is nothing useful to draw.
     if (maximumMagnitude < nearZero)
     {
         return vertices;
@@ -137,6 +143,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
 
     const float maximumLengthInCells = arrowLengthScale * static_cast<float>(stride);
 
+    // Convert slice cell coordinates into OpenGL normalized device coordinates.
     auto convertToNdc = [planeWidth, planeHeight](float cellX, float cellY)
     {
         const float ndcX = -1.0f + 2.0f * cellX / static_cast<float>(planeWidth);
@@ -155,6 +162,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
             continue;
         }
 
+        // Normalize velocity so it can be used only as a direction.
         const float directionX = vx / magnitude;
         const float directionY = vy / magnitude;
 
@@ -167,6 +175,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
             continue;
         }
 
+        // Start the arrow in the center of the sampled cell.
         const float startX = static_cast<float>(sample.planeX) + 0.5f;
         const float startY = static_cast<float>(sample.planeY) + 0.5f;
 
@@ -194,6 +203,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
         const auto [leftNdcX, leftNdcY] = convertToNdc(leftX, leftY);
         const auto [rightNdcX, rightNdcY] = convertToNdc(rightX, rightY);
 
+        // Main arrow line plus two small lines for the arrow head.
         appendLine(vertices, startNdcX, startNdcY, tipNdcX, tipNdcY);
         appendLine(vertices, tipNdcX, tipNdcY, leftNdcX, leftNdcY);
         appendLine(vertices, tipNdcX, tipNdcY, rightNdcX, rightNdcY);

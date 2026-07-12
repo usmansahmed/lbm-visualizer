@@ -12,6 +12,7 @@
 
 UserInterface::UserInterface(GLFWwindow *window)
 {
+    // ImGui needs a valid GLFW window to create its OpenGL backend.
     if (window == nullptr)
     {
         throw std::invalid_argument("Cannot initialize ImGui with a null window.");
@@ -19,12 +20,16 @@ UserInterface::UserInterface(GLFWwindow *window)
 
     IMGUI_CHECKVERSION();
 
+    // Create the ImGui context and enable the dark theme.
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
 
     ImGuiIO &io = ImGui::GetIO();
+
+    // Docking lets the controls and simulation view live in movable panels.
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
+    // Initialize the platform and OpenGL backends used by ImGui.
     if (!ImGui_ImplGlfw_InitForOpenGL(window, true))
     {
         ImGui::DestroyContext();
@@ -42,6 +47,7 @@ UserInterface::UserInterface(GLFWwindow *window)
 
 UserInterface::~UserInterface()
 {
+    // Shut down ImGui backends before destroying the ImGui context.
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
@@ -49,6 +55,7 @@ UserInterface::~UserInterface()
 
 void UserInterface::beginFrame()
 {
+    // Start a new ImGui frame before drawing any UI widgets.
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -56,6 +63,7 @@ void UserInterface::beginFrame()
 
 void UserInterface::render()
 {
+    // Convert ImGui commands into OpenGL draw calls.
     ImGui::Render();
 
     ImGui_ImplOpenGL3_RenderDrawData(
@@ -64,6 +72,7 @@ void UserInterface::render()
 
 void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pendingConfig, const ProbeResult &probe)
 {
+    // Combo-box labels must match the enum order.
     static const char *orientationNames[] = {"XY", "XZ", "YZ"};
 
     static const char *displayFieldNames[] = {"Velocity magnitude", "Velocity X", "Velocity Y", "Velocity Z", "Density"};
@@ -71,6 +80,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
     static const char *obstacleNames[] = {"None", "Single block", "Two blocks", "Single cylinder", "Two cylinders", "Cylinder array",
                                           "Sphere", "Two spheres", "Backward-facing step", "Wall with slit", "Random porous block"};
 
+    // Runtime controls that affect the current simulation state.
     ImGui::SeparatorText("Run");
     ImGui::Text("Grid dimensions: %d x %d x %d", state.nx, state.ny, state.nz);
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
@@ -102,6 +112,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
         }
     }
 
+    // Controls that change what slice and field are displayed.
     ImGui::SeparatorText("Visualization");
 
     int selectedDisplayField = static_cast<int>(state.displayField);
@@ -117,6 +128,8 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
     if (ImGui::Combo("Orientation", &selectedOrientation, orientationNames, IM_ARRAYSIZE(orientationNames)))
     {
         state.orientation = static_cast<SliceOrientation>(selectedOrientation);
+
+        // Reset the slice to the middle of the newly selected orientation.
         state.maximumSlice = getMaximumSliceIndex(state.orientation, state.nx, state.ny, state.nz);
         state.currentSlice = state.maximumSlice / 2;
         state.orientationChanged = true;
@@ -128,6 +141,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
         state.sliceChanged = true;
     }
 
+    // Color scaling controls how scalar values are mapped to the colormap.
     ImGui::SeparatorText("Color scale");
     ImGui::Checkbox("Automatic color scaling", &state.automaticColorScaling);
 
@@ -141,6 +155,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
 
     // if (state.displayField == DisplayField::VelocityMagnitude)
     // {
+    // Draw the same color bar used by the fragment shader.
     const ImU32 colors[] = {
         ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.0f, 0.5f, 1.0f)),
         ImGui::ColorConvertFloat4ToU32(ImVec4(0.0f, 0.5f, 1.0f, 1.0f)),
@@ -160,6 +175,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
     //     drawColorBar(state.finalMinimum, state.finalMaximum, colors, 3);
     // }
 
+    // Arrow settings affect only the overlay, not the simulation itself.
     ImGui::SeparatorText("Velocity arrows");
     if (ImGui::Checkbox("Show velocity arrows", &state.showVelocityArrows))
     {
@@ -178,6 +194,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
         }
     }
 
+    // Show information for the cell selected in the simulation view.
     ImGui::SeparatorText("Probe");
 
     if (!probe.valid)
@@ -195,6 +212,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
         ImGui::Text("Cell type: %s", probe.obstacle ? "Obstacle" : "Fluid");
     }
 
+    // These settings rebuild the solver, so they are applied only after restart.
     ImGui::SeparatorText("Simulation setup");
     ImGui::TextDisabled("Changes below require restarting the simulation.");
 
@@ -202,6 +220,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
     ImGui::InputInt("Ny", &pendingConfig.ny);
     ImGui::InputInt("Nz", &pendingConfig.nz);
 
+    // Keep grid dimensions in a safe range.
     pendingConfig.nx = std::max(8, pendingConfig.nx);
 
     pendingConfig.ny = std::max(8, pendingConfig.ny);
@@ -210,6 +229,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
 
     ImGui::SliderFloat("Omega", &pendingConfig.omega, 0.8f, 1.8f);
 
+    // Display useful derived LBM parameters for the selected omega.
     const float tau = 1.0f / pendingConfig.omega;
 
     const float viscosity = (1.0f / 3.0f) * (tau - 0.5f);
@@ -224,6 +244,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
         pendingConfig.obstaclePreset = static_cast<ObstaclePreset>(preset);
     }
 
+    // Show only the obstacle parameters that are relevant for the selected preset.
     if (pendingConfig.obstaclePreset == ObstaclePreset::SingleBlock ||
         pendingConfig.obstaclePreset == ObstaclePreset::TwoBlocks ||
         pendingConfig.obstaclePreset == ObstaclePreset::WallWithSlit)
@@ -268,6 +289,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
 
     ImGui::Spacing();
 
+    // Recreate the solver using the pending setup values.
     if (ImGui::Button("Apply / Restart Simulation"))
     {
         state.restartRequested = true;
@@ -276,6 +298,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
 
 void UserInterface::drawColorBar(float minimumValue, float maximumValue, const ImU32 colors[], int colorCount)
 {
+    // Draw a small horizontal color legend inside the current ImGui window.
     const ImVec2 barStart = ImGui::GetCursorScreenPos();
 
     const float barWidth = ImGui::GetContentRegionAvail().x;
@@ -288,6 +311,7 @@ void UserInterface::drawColorBar(float minimumValue, float maximumValue, const I
 
     ImDrawList *drawList = ImGui::GetWindowDrawList();
 
+    // Draw the color bar as multiple gradient segments.
     for (int i = 0; i < segmentCount; ++i)
     {
         const ImVec2 segmentStart{barStart.x + static_cast<float>(i) * segmentWidth, barStart.y};
@@ -306,6 +330,7 @@ void UserInterface::drawColorBar(float minimumValue, float maximumValue, const I
 
     drawList->AddRect(barStart, barEnd, ImGui::GetColorU32(ImGuiCol_Border));
 
+    // Reserve the same space in the ImGui layout that was drawn manually.
     ImGui::Dummy(ImVec2(barWidth, barHeight));
 
     char minimumText[32];
@@ -315,6 +340,7 @@ void UserInterface::drawColorBar(float minimumValue, float maximumValue, const I
 
     std::snprintf(maximumText, sizeof(maximumText), "%.3e", maximumValue);
 
+    // Show minimum and maximum labels below the bar.
     ImGui::TextUnformatted(minimumText);
 
     ImGui::SameLine();

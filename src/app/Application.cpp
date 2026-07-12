@@ -22,6 +22,7 @@
 
 namespace
 {
+    // Convert CUDA errors into exceptions with a useful message.
     void checkCuda(cudaError_t error, const char *message)
     {
         if (error != cudaSuccess)
@@ -35,6 +36,7 @@ Application::Application()
 {
     try
     {
+        // Initialize the window, OpenGL resources, and the first simulation.
         initializeWindow();
         initializeOpenGL();
         initializeResources();
@@ -42,6 +44,7 @@ Application::Application()
     }
     catch (...)
     {
+        // Clean up partially created resources if initialization fails.
         probeOverlayRenderer_.reset();
         probeOverlayShader_.reset();
         pboBuffer_.reset();
@@ -68,6 +71,7 @@ Application::Application()
 
 Application::~Application()
 {
+    // Make the OpenGL context current before destroying OpenGL/CUDA-interop resources.
     if (window_ != nullptr)
     {
         glfwMakeContextCurrent(window_);
@@ -96,6 +100,7 @@ Application::~Application()
 
 void Application::initializeWindow()
 {
+    // Create the GLFW window and OpenGL context.
     if (glfwInit() != GLFW_TRUE)
     {
         throw std::runtime_error(
@@ -119,6 +124,7 @@ void Application::initializeWindow()
 
     glfwMakeContextCurrent(window_);
 
+    // Store the Application pointer so static callbacks can call member functions.
     glfwSetWindowUserPointer(window_, this);
 
     glfwSetKeyCallback(window_, &keyCallback);
@@ -128,6 +134,7 @@ void Application::initializeWindow()
 
 void Application::initializeOpenGL()
 {
+    // Load OpenGL functions through GLAD after the context has been created.
     const int gladVersion = gladLoadGL(glfwGetProcAddress);
 
     if (gladVersion == 0)
@@ -147,6 +154,7 @@ void Application::initializeOpenGL()
 
 void Application::initializeResources()
 {
+    // Create shaders, renderers, textures, PBOs, and the ImGui interface.
     shader_ = std::make_unique<Shader>("shaders/quad.vert", "shaders/quad.frag");
     arrowShader_ = std::make_unique<Shader>("shaders/velocity_arrows.vert", "shaders/velocity_arrows.frag");
     probeOverlayShader_ = std::make_unique<Shader>("shaders/probe_overlay.vert", "shaders/probe_overlay.frag");
@@ -164,12 +172,14 @@ void Application::initializeResources()
 
     shader_->use();
 
+    // These texture units are used by the main fragment shader.
     shader_->setInt("fieldTexture", 0);
     shader_->setInt("obstacleTexture", 1);
 }
 
 void Application::updateSimulation()
 {
+    // Only advance the solver while playback is enabled.
     if (!state_.playing)
         return;
 
@@ -178,6 +188,7 @@ void Application::updateSimulation()
     if (currentTime - lastPlaybackTime_ < playbackInterval_)
         return;
 
+    // Run one LBM time step on the GPU.
     solver_->step();
 
     checkCuda(cudaPeekAtLastError(), "solver step kernel launch");
@@ -189,6 +200,7 @@ void Application::updateSimulation()
 
 void Application::updateVisualization()
 {
+    // Refresh the texture only when the selected data or slice has changed.
     const bool visualizationChanged = state_.dataChanged || state_.sliceChanged ||
                                       state_.orientationChanged || state_.fieldChanged;
 
@@ -197,20 +209,25 @@ void Application::updateVisualization()
 
     if (visualizationChanged)
     {
+        // Clamp the slice index against the current grid and orientation.
         state_.maximumSlice = getMaximumSliceIndex(state_.orientation, state_.nx, state_.ny, state_.nz);
 
         state_.currentSlice = std::clamp(state_.currentSlice, 0, state_.maximumSlice);
 
         getSliceDimensions(state_.orientation, state_.nx, state_.ny, state_.nz, textureWidth_, textureHeight_);
 
+        // Map the OpenGL PBO so CUDA can write the selected slice directly into it.
         float *pboDevicePointer = pboBuffer_->mapPBOToCuda(textureWidth_, textureHeight_);
 
         solver_->prepareVisualizationSlice(pboDevicePointer, state_.displayField, state_.orientation, state_.currentSlice, textureWidth_, textureHeight_, state_.showVelocityArrows, state_.automaticColorScaling);
 
         checkCuda(cudaGetLastError(), "prepareData kernel launch");
         checkCuda(cudaDeviceSynchronize(), "prepareData kernel execution");
+
+        // Unmap before OpenGL uses the PBO as a texture upload source.
         pboBuffer_->unmapPBOFromCuda();
 
+        // Obstacles are uploaded as a separate texture so the shader can draw them clearly.
         extractSlice(state_, obstacleSlice_, state_.orientation, DisplayField::Obstacle, state_.currentSlice);
 
         if (state_.automaticColorScaling)
@@ -223,12 +240,14 @@ void Application::updateVisualization()
         state_.finalMinimum = state_.automaticColorScaling ? state_.automaticMinimumValue : state_.minimumValue;
         state_.finalMaximum = state_.automaticColorScaling ? state_.automaticMaximumValue : state_.maximumValue;
 
+        // Copy the CUDA-written PBO into the OpenGL texture used for rendering.
         texture_->updateFromPBO(textureWidth_, textureHeight_, pboBuffer_->getID());
         obstacleTexture_->update(textureWidth_, textureHeight_, obstacleSlice_);
     }
 
     if (arrowsChanged)
     {
+        // Rebuild arrow geometry for the current slice when arrows are enabled.
         if (state_.showVelocityArrows)
         {
             const VelocitySlice2D slice = solver_->getVelocitySlice2D();
@@ -247,6 +266,7 @@ void Application::updateVisualization()
         updateProbeValues();
     }
 
+    // Clear change flags after all dependent data has been refreshed.
     state_.dataChanged = false;
     state_.sliceChanged = false;
     state_.orientationChanged = false;
@@ -256,6 +276,7 @@ void Application::updateVisualization()
 
 void Application::renderSimulation()
 {
+    // Draw the scalar field texture first.
     shader_->use();
 
     shader_->setInt("fieldTexture", 0);
@@ -272,6 +293,7 @@ void Application::renderSimulation()
 
     renderer_->drawQuad();
 
+    // Draw overlays on top of the scalar texture.
     if (state_.showVelocityArrows)
     {
         arrowShader_->use();
@@ -287,12 +309,14 @@ void Application::renderSimulation()
 
 void Application::run()
 {
+    // Main application loop.
     while (glfwWindowShouldClose(window_) == GLFW_FALSE)
     {
         glfwPollEvents();
 
         if (state_.restartRequested)
         {
+            // Recreate CUDA buffers and obstacle data after setup changes.
             restartSimulation();
             state_.restartRequested = false;
         }
@@ -300,6 +324,7 @@ void Application::run()
         updateSimulation();
         updateVisualization();
 
+        // Start each frame from a clean full-window OpenGL state.
         int framebufferWidth = 0;
         int framebufferHeight = 0;
 
@@ -311,18 +336,21 @@ void Application::run()
 
         userInterface_->beginFrame();
 
+        // Build ImGui first so the Simulation View rectangle is known.
         drawMainDockSpace();
         drawSimulationViewWindow();
         drawControlsWindow();
 
         const bool validTextureViewport = updateTextureViewport();
 
+        // Render ImGui using the full framebuffer viewport.
         glDisable(GL_SCISSOR_TEST);
         glViewport(0, 0, framebufferWidth, framebufferHeight);
         userInterface_->render();
 
         if (validTextureViewport)
         {
+            // Draw the simulation into the Simulation View panel after ImGui.
             handleProbeInput();
             updateProbeOverlay();
             applyTextureViewport();
@@ -340,6 +368,7 @@ void Application::keyCallback(
     int action,
     int mods)
 {
+    // Recover the Application instance stored in the GLFW window.
     auto *application = static_cast<Application *>(glfwGetWindowUserPointer(window));
 
     if (application == nullptr)
@@ -371,6 +400,8 @@ void Application::handleKey(
     {
         return;
     }
+
+    // Keyboard shortcuts for closing, playback, and slice navigation.
 
     if (key == GLFW_KEY_ESCAPE)
     {
@@ -436,6 +467,7 @@ void Application::handleKey(
 
 void Application::setOrientation(SliceOrientation orientation)
 {
+    // Changing orientation also resets the current slice to the middle.
     if (state_.orientation == orientation)
         return;
 
@@ -451,6 +483,7 @@ void Application::setOrientation(SliceOrientation orientation)
 
 bool Application::updateTextureViewport()
 {
+    // Calculate the OpenGL viewport that fits the texture inside the ImGui panel.
     if (textureWidth_ <= 0 || textureHeight_ <= 0 || simulationViewSize_.x <= 1.0f || simulationViewSize_.y <= 1.0f)
     {
         return false;
@@ -480,6 +513,8 @@ bool Application::updateTextureViewport()
     const float localPanelY = simulationViewPosition_.y - imguiViewport->Pos.y;
 
     const int panelX = static_cast<int>(localPanelX * scaleX);
+
+    // ImGui uses top-left coordinates, while OpenGL viewports start at the bottom-left.
     const int panelY = static_cast<int>((static_cast<float>(windowHeight) - localPanelY - simulationViewSize_.y) * scaleY);
 
     const int panelWidth = static_cast<int>(simulationViewSize_.x * scaleX);
@@ -506,6 +541,7 @@ bool Application::updateTextureViewport()
 
     if (panelAspect > textureAspect)
     {
+        // Panel is wider than the texture, so add horizontal letterboxing.
         viewportHeight = panelHeight;
         viewportWidth = static_cast<int>(static_cast<float>(panelHeight) * textureAspect);
 
@@ -513,6 +549,7 @@ bool Application::updateTextureViewport()
     }
     else
     {
+        // Panel is taller than the texture, so add vertical letterboxing.
         viewportWidth = panelWidth;
         viewportHeight = static_cast<int>(static_cast<float>(panelWidth) / textureAspect);
         viewportY = panelY + (panelHeight - viewportHeight) / 2;
@@ -528,6 +565,7 @@ bool Application::updateTextureViewport()
 
 void Application::applyTextureViewport()
 {
+    // Clip rendering to the Simulation View panel and draw the texture inside it.
     glEnable(GL_SCISSOR_TEST);
 
     glScissor(simulationPanelViewport_.x, simulationPanelViewport_.y, simulationPanelViewport_.width, simulationPanelViewport_.height);
@@ -537,6 +575,7 @@ void Application::applyTextureViewport()
 
 void Application::updateProbeValues()
 {
+    // Refresh the displayed probe values from the selected 3D cell.
     if (!probe_.valid)
         return;
 
@@ -555,6 +594,7 @@ void Application::updateProbeValues()
 
 void Application::handleProbeInput()
 {
+    // Convert a mouse click in the texture viewport into a 3D cell coordinate.
     const bool leftMousePressed = glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
 
     const bool justPressed = leftMousePressed && !previousLeftMousePressed_;
@@ -623,6 +663,7 @@ void Application::handleProbeInput()
     planeX = std::clamp(planeX, 0, textureWidth_ - 1);
     planeY = std::clamp(planeY, 0, textureHeight_ - 1);
 
+    // Map the 2D slice coordinate back to a 3D grid coordinate.
     switch (state_.orientation)
     {
     case SliceOrientation::XY:
@@ -657,6 +698,7 @@ void Application::handleProbeInput()
 
 void Application::updateProbeOverlay()
 {
+    // Rebuild the small overlay marker around the selected probe cell.
     int planeWidth = 0;
     int planeHeight = 0;
 
@@ -667,12 +709,14 @@ void Application::updateProbeOverlay()
 
 void Application::restartSimulation()
 {
+    // Stop playback while the solver and GPU resources are recreated.
     state_.playing = false;
 
     activeConfig_ = pendingConfig_;
 
     auto obstacle = createObstacleMask(activeConfig_);
 
+    // Create a new solver using the selected configuration and obstacle mask.
     solver_ = std::make_unique<LbmSolver>(activeConfig_, obstacle);
 
     state_.nx = activeConfig_.nx;
@@ -690,6 +734,7 @@ void Application::restartSimulation()
 
     probe_.valid = false;
 
+    // Force the first visualization update after restart.
     state_.dataChanged = true;
     state_.sliceChanged = true;
     state_.orientationChanged = true;
@@ -699,6 +744,7 @@ void Application::restartSimulation()
 
 void Application::drawMainDockSpace()
 {
+    // Full-window invisible host for ImGui docking.
     ImGuiWindowFlags windowFlags =
         ImGuiWindowFlags_MenuBar |
         ImGuiWindowFlags_NoDocking |
@@ -739,6 +785,7 @@ void Application::drawMainDockSpace()
 
 void Application::drawControlsWindow()
 {
+    // Dockable window containing all UI controls.
     ImGui::Begin("Controls");
     userInterface_->drawControls(state_, pendingConfig_, probe_);
     ImGui::End();
@@ -746,6 +793,7 @@ void Application::drawControlsWindow()
 
 void Application::drawSimulationViewWindow()
 {
+    // Dockable panel used as the target area for OpenGL rendering.
     ImGui::Begin("Simulation View");
 
     simulationViewPosition_ = ImGui::GetCursorScreenPos();
@@ -762,6 +810,7 @@ void Application::drawSimulationViewWindow()
         simulationViewSize_.y = 1.0f;
     }
 
+    // The invisible button reserves space and lets ImGui report hover/click state.
     ImGui::InvisibleButton("Simulation Canvas", simulationViewSize_, ImGuiButtonFlags_MouseButtonLeft);
 
     simulationViewHovered_ = ImGui::IsItemHovered();

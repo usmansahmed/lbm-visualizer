@@ -23,6 +23,7 @@ namespace
 {
     void checkCuda(cudaError_t error, const char *message)
     {
+        // Convert CUDA errors into exceptions with a useful message.
         if (error != cudaSuccess)
         {
             throw std::runtime_error(std::string(message) + ": " + cudaGetErrorString(error));
@@ -32,6 +33,7 @@ namespace
 
 LbmSolver::LbmSolver(const SimulationConfig &config, const std::vector<unsigned char> &obstacle)
 {
+    // Store grid dimensions from the selected simulation configuration.
     gridData_.Nx = config.nx;
     gridData_.Ny = config.ny;
     gridData_.Nz = config.nz;
@@ -44,6 +46,7 @@ LbmSolver::LbmSolver(const SimulationConfig &config, const std::vector<unsigned 
     size_t macro_size = sizeof(float) * gridData_.N;
     const std::size_t solid_size = sizeof(unsigned char) * static_cast<std::size_t>(gridData_.N);
 
+    // Allocate distribution functions, macroscopic fields, and the obstacle mask on the GPU.
     cudaMalloc(&gridData_.d_f_old, f_size);
     cudaMalloc(&gridData_.d_f_new, f_size);
     cudaMalloc(&gridData_.d_rho, macro_size);
@@ -52,6 +55,7 @@ LbmSolver::LbmSolver(const SimulationConfig &config, const std::vector<unsigned 
     cudaMalloc(&gridData_.d_uz, macro_size);
     cudaMalloc(&gridData_.d_solid, solid_size);
 
+    // Keep a CPU copy of the obstacle mask for probing and arrow filtering.
     gridData_.h_solid = static_cast<unsigned char *>(std::malloc(solid_size));
 
     if (obstacle.size() != static_cast<std::size_t>(gridData_.N))
@@ -62,14 +66,17 @@ LbmSolver::LbmSolver(const SimulationConfig &config, const std::vector<unsigned 
     std::copy(obstacle.begin(), obstacle.end(), gridData_.h_solid);
     cudaMemcpy(gridData_.d_solid, gridData_.h_solid, solid_size, cudaMemcpyHostToDevice);
 
+    // Use a 3D CUDA launch configuration for the full simulation domain.
     threads_ = dim3(8, 8, 4);
     blocks_ = dim3((gridData_.Nx + threads_.x - 1) / threads_.x, (gridData_.Ny + threads_.y - 1) / threads_.y, (gridData_.Nz + threads_.z - 1) / threads_.z);
 
+    // Initialize density, velocity, and distribution functions.
     launchInitKernel(gridData_, blocks_, threads_);
 }
 
 LbmSolver::~LbmSolver()
 {
+    // Release GPU and CPU memory owned by the solver.
     cudaFree(gridData_.d_f_old);
     cudaFree(gridData_.d_f_new);
     cudaFree(gridData_.d_rho);
@@ -84,9 +91,11 @@ LbmSolver::~LbmSolver()
 
 void LbmSolver::step()
 {
-    // 1. Physics Engine Steps
+    // Advance the LBM solver by one time step.
     launchCollisionKernel(gridData_, omega_, blocks_, threads_);
     launchStreamingKernel(gridData_, blocks_, threads_);
+
+    // After streaming, the new distribution buffer becomes the current one.
     std::swap(gridData_.d_f_old, gridData_.d_f_new);
 }
 
@@ -98,6 +107,7 @@ const unsigned char *LbmSolver::getObstacle() const
 void LbmSolver::prepareVisualizationSlice(float *mappedPixels, DisplayField field, SliceOrientation orientation,
                                           int sliceIndex, int planeWidth, int planeHeight, bool writeArrowSlice, bool automaticScaling)
 {
+    // Use a 2D CUDA launch because visualization works on the selected slice.
     dim3 blockSize(16, 16);
     dim3 gridSize((planeWidth + blockSize.x - 1) / blockSize.x, (planeHeight + blockSize.y - 1) / blockSize.y);
 
@@ -109,12 +119,16 @@ void LbmSolver::prepareVisualizationSlice(float *mappedPixels, DisplayField fiel
     }
 
     const std::size_t numberOfBlocks = static_cast<std::size_t>(gridSize.x) * static_cast<std::size_t>(gridSize.y);
+
     if (automaticScaling)
     {
         ensureScaleBufferCapacity(numberOfBlocks);
     }
 
+    // Clear any previous CUDA error before launching the visualization kernel.
     cudaGetLastError();
+
+    // Write the selected scalar field directly into the mapped OpenGL PBO.
     launchPrepareVisualizationSliceKernel(gridData_, mappedPixels,
                                           field, orientation, sliceIndex,
                                           planeWidth, planeHeight, writeArrowSlice, automaticScaling,
@@ -125,6 +139,7 @@ void LbmSolver::prepareVisualizationSlice(float *mappedPixels, DisplayField fiel
 
     if (writeArrowSlice)
     {
+        // Copy the in-plane velocity components back to the CPU for arrow geometry.
         velocitySlice_.width = planeWidth;
         velocitySlice_.height = planeHeight;
         velocitySlice_.horizontal.resize(sliceSize);
@@ -136,6 +151,7 @@ void LbmSolver::prepareVisualizationSlice(float *mappedPixels, DisplayField fiel
 
     if (automaticScaling)
     {
+        // Copy only per-block min/max values instead of the full slice.
         h_blockMinimums_.resize(numberOfBlocks);
         h_blockMaximums_.resize(numberOfBlocks);
         cudaMemcpy(h_blockMinimums_.data(), gridData_.d_blockMinimums, numberOfBlocks * sizeof(float), cudaMemcpyDeviceToHost);
@@ -155,6 +171,7 @@ void LbmSolver::ensureArrowSliceCapacity(std::size_t requiredCount)
         return;
     }
 
+    // Reallocate arrow buffers only when the current slice is larger than before.
     if (gridData_.d_arrowHorizontal_ != nullptr)
     {
         checkCuda(cudaFree(gridData_.d_arrowHorizontal_), "cudaFree d_arrowHorizontal_");
@@ -185,6 +202,7 @@ void LbmSolver::ensureScaleBufferCapacity(std::size_t requiredBlockCount)
         return;
     }
 
+    // Reallocate block min/max buffers only when the number of CUDA blocks grows.
     if (gridData_.d_blockMinimums != nullptr)
     {
         checkCuda(cudaFree(gridData_.d_blockMinimums), "cudaFree d_blockMinimums");
@@ -210,7 +228,9 @@ const VelocitySlice2D &LbmSolver::getVelocitySlice2D() const
 
 void LbmSolver::readProbeCell(ProbeResult &result, std::size_t index) const
 {
+    // Obstacle cells are not fluid cells, so report zero velocity for them.
     result.obstacle = gridData_.h_solid != nullptr && gridData_.h_solid[index] != 0;
+
     if (result.obstacle)
     {
         result.density = 0.0f;
@@ -221,6 +241,7 @@ void LbmSolver::readProbeCell(ProbeResult &result, std::size_t index) const
         return;
     }
 
+    // Copy one cell of macroscopic data from the GPU to the CPU.
     checkCuda(cudaMemcpy(&result.density, gridData_.d_rho + index, sizeof(float), cudaMemcpyDeviceToHost), "copy probe density");
     checkCuda(cudaMemcpy(&result.velocityX, gridData_.d_ux + index, sizeof(float), cudaMemcpyDeviceToHost), "copy probe velocityX");
     checkCuda(cudaMemcpy(&result.velocityY, gridData_.d_uy + index, sizeof(float), cudaMemcpyDeviceToHost), "copy probe velocityY");
@@ -233,6 +254,7 @@ void LbmSolver::readProbeCell(ProbeResult &result, std::size_t index) const
 
 std::pair<float, float> LbmSolver::getValueRange() const
 {
+    // Reduce the copied block min/max values on the CPU.
     float minimumValue = *std::min_element(h_blockMinimums_.begin(), h_blockMinimums_.end());
     float maximumValue = *std::max_element(h_blockMaximums_.begin(), h_blockMaximums_.end());
     return {minimumValue, maximumValue};

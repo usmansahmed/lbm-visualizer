@@ -7,6 +7,7 @@ namespace
 
     void appendLine(std::vector<float> &vertices, float x1, float y1, float x2, float y2)
     {
+        // Store one line segment as two 2D vertices.
         vertices.push_back(x1);
         vertices.push_back(y1);
 
@@ -21,6 +22,7 @@ std::vector<float> buildProbeOverlayVertices(const ProbeResult &probe, SliceOrie
 {
     std::vector<float> vertices;
 
+    // Nothing should be drawn if the probe is invalid or the slice has no size.
     if (!probe.valid || planeWidth <= 0 || planeHeight <= 0)
     {
         return vertices;
@@ -31,6 +33,7 @@ std::vector<float> buildProbeOverlayVertices(const ProbeResult &probe, SliceOrie
 
     bool probeIsOnCurrentSlice = false;
 
+    // Convert the 3D probe coordinate to the 2D coordinate of the current slice.
     switch (orientation)
     {
     case SliceOrientation::XY:
@@ -64,12 +67,14 @@ std::vector<float> buildProbeOverlayVertices(const ProbeResult &probe, SliceOrie
         return vertices;
     }
 
+    // Ignore the probe if it is outside the visible slice.
     if (planeX < 0 || planeX >= planeWidth ||
         planeY < 0 || planeY >= planeHeight)
     {
         return vertices;
     }
 
+    // Convert from cell coordinates to normalized device coordinates.
     const auto convertXToNdc = [planeWidth](float x)
     {
         return -1.0f + 2.0f * x / static_cast<float>(planeWidth);
@@ -85,6 +90,7 @@ std::vector<float> buildProbeOverlayVertices(const ProbeResult &probe, SliceOrie
     const float bottom = convertYToNdc(static_cast<float>(planeY));
     const float top = convertYToNdc(static_cast<float>(planeY + 1));
 
+    // Draw a small rectangle around the selected cell.
     appendLine(vertices, left, bottom, right, bottom);
     appendLine(vertices, right, bottom, right, top);
     appendLine(vertices, right, top, left, top);
@@ -98,6 +104,7 @@ std::vector<float> buildProbeOverlayVertices(const ProbeResult &probe, SliceOrie
     const float crossHalfWidth = 1.25f * cellWidth;
     const float crossHalfHeight = 1.25f * cellHeight;
 
+    // Add a small cross so the selected cell is easier to see.
     appendLine(vertices, centerX - crossHalfWidth, centerY, centerX + crossHalfWidth, centerY);
     appendLine(vertices, centerX, centerY - crossHalfHeight, centerX, centerY + crossHalfHeight);
 

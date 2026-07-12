@@ -9,20 +9,24 @@ namespace
 {
     std::size_t index3D(int x, int y, int z, int nx, int ny)
     {
+        // Convert a 3D grid coordinate into a flat array index.
         return static_cast<std::size_t>(x) + static_cast<std::size_t>(nx) * (static_cast<std::size_t>(y) + static_cast<std::size_t>(ny) * static_cast<std::size_t>(z));
     }
 
     void setSolid(std::vector<unsigned char> &solid, int nx, int ny, int nz, int x, int y, int z)
     {
+        // Ignore coordinates outside the simulation domain.
         if (x < 0 || x >= nx || y < 0 || y >= ny || z < 0 || z >= nz)
         {
             return;
         }
+
         solid[index3D(x, y, z, nx, ny)] = 1;
     }
 
     void addBlock(std::vector<unsigned char> &solid, int nx, int ny, int nz, int centerX, int centerY, int centerZ, int sizeX, int sizeY, int sizeZ)
     {
+        // Fill a rectangular block around the given center position.
         for (int z = centerZ - sizeZ / 2; z < centerZ + sizeZ / 2; ++z)
         {
             for (int y = centerY - sizeY / 2; y < centerY + sizeY / 2; ++y)
@@ -33,6 +37,7 @@ namespace
                     {
                         continue;
                     }
+
                     solid[index3D(x, y, z, nx, ny)] = 1;
                 }
             }
@@ -41,7 +46,9 @@ namespace
 
     void addCylinderAlongZ(std::vector<unsigned char> &solid, int nx, int ny, int nz, int centerX, int centerY, int radius)
     {
+        // Create a cylinder whose circular cross-section is in the XY plane.
         const int r2 = radius * radius;
+
         for (int z = 0; z < nz; ++z)
         {
             for (int y = 0; y < ny; ++y)
@@ -63,12 +70,14 @@ namespace
     void addCylinderArray(std::vector<unsigned char> &solid, int nx, int ny, int nz,
                           int radius, int spacingX, int spacingY)
     {
+        // Keep enough spacing so cylinders do not overlap too much.
         spacingX = std::max(2 * radius + 2, spacingX);
         spacingY = std::max(2 * radius + 2, spacingY);
 
         const int startX = nx / 4;
         const int endX = nx / 2;
 
+        // Place several cylinders in the middle part of the channel.
         for (int x = startX; x <= endX; x += spacingX)
         {
             for (int y = spacingY; y < ny; y += spacingY)
@@ -82,6 +91,7 @@ namespace
     void addSphere(std::vector<unsigned char> &solid, int nx, int ny, int nz,
                    int centerX, int centerY, int centerZ, int radius)
     {
+        // Mark all cells inside the sphere radius as solid.
         const int radiusSquared = radius * radius;
 
         for (int z = 0; z < nz; ++z)
@@ -105,8 +115,10 @@ namespace
 
     void addBackwardFacingStep(std::vector<unsigned char> &solid, int nx, int ny, int nz, int stepLength, int stepHeight)
     {
+        // Block the lower part near the inlet to create a sudden expansion.
         stepLength = std::clamp(stepLength, 1, nx);
         stepHeight = std::clamp(stepHeight, 1, ny - 1);
+
         for (int z = 0; z < nz; ++z)
         {
             for (int y = 0; y < stepHeight; ++y)
@@ -122,6 +134,7 @@ namespace
     void addWallWithSlit(std::vector<unsigned char> &solid, int nx, int ny, int nz,
                          int wallX, int wallThickness, int slitCenterY, int slitHeight)
     {
+        // Create a vertical wall in X with an opening around slitCenterY.
         wallX = std::clamp(wallX, 0, nx - 1);
         wallThickness = std::max(1, wallThickness);
         slitHeight = std::clamp(slitHeight, 1, ny);
@@ -135,6 +148,7 @@ namespace
             for (int y = 0; y < ny; ++y)
             {
                 const bool insideSlit = y >= slitMinY && y <= slitMaxY;
+
                 if (insideSlit)
                 {
                     continue;
@@ -152,14 +166,18 @@ namespace
         std::vector<unsigned char> &solid, int nx, int ny, int nz,
         int minX, int maxX, float solidProbability, unsigned int seed)
     {
+        // Fill a section of the domain with randomly placed solid cells.
         minX = std::clamp(minX, 0, nx);
         maxX = std::clamp(maxX, 0, nx);
+
         if (maxX <= minX)
         {
             return;
         }
 
         solidProbability = std::clamp(solidProbability, 0.0f, 1.0f);
+
+        // A fixed seed makes the random obstacle repeatable.
         std::mt19937 generator(seed);
         std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
 
@@ -170,6 +188,7 @@ namespace
                 for (int x = minX; x < maxX; ++x)
                 {
                     const float randomValue = distribution(generator);
+
                     if (randomValue < solidProbability)
                     {
                         setSolid(solid, nx, ny, nz, x, y, z);
@@ -182,6 +201,7 @@ namespace
 
 std::vector<unsigned char> createObstacleMask(const SimulationConfig &config)
 {
+    // Start with a fully fluid domain, then mark obstacle cells as solid.
     const std::size_t count = static_cast<std::size_t>(config.nx) * static_cast<std::size_t>(config.ny) * static_cast<std::size_t>(config.nz);
 
     std::vector<unsigned char> solid(count, 0);
@@ -195,6 +215,7 @@ std::vector<unsigned char> createObstacleMask(const SimulationConfig &config)
 
     case ObstaclePreset::SingleBlock:
     {
+        // Place the obstacle at one quarter of the domain length.
         addBlock(solid, config.nx, config.ny, config.nz,
                  config.nx / 4, config.ny / 2, config.nz / 2,
                  config.obstacleSize, config.obstacleSize, config.nz);
@@ -204,6 +225,7 @@ std::vector<unsigned char> createObstacleMask(const SimulationConfig &config)
 
     case ObstaclePreset::TwoBlocks:
     {
+        // Use two blocks at different Y positions to create interacting wakes.
         addBlock(solid, config.nx, config.ny, config.nz,
                  config.nx / 4, config.ny / 3, config.nz / 2,
                  config.obstacleSize, config.obstacleSize, config.nz);
@@ -233,6 +255,7 @@ std::vector<unsigned char> createObstacleMask(const SimulationConfig &config)
 
         break;
     }
+
     case ObstaclePreset::CylinderArray:
     {
         addCylinderArray(solid, config.nx, config.ny, config.nz,
@@ -243,6 +266,7 @@ std::vector<unsigned char> createObstacleMask(const SimulationConfig &config)
 
     case ObstaclePreset::Sphere:
     {
+        // A sphere is most visible when the Z dimension is not too thin.
         addSphere(solid, config.nx, config.ny, config.nz,
                   config.nx / 4, config.ny / 2, config.nz / 2, config.obstacleRadius);
 
@@ -268,6 +292,7 @@ std::vector<unsigned char> createObstacleMask(const SimulationConfig &config)
 
     case ObstaclePreset::WallWithSlit:
     {
+        // The slit is centered in Y, so the flow passes through the middle opening.
         addWallWithSlit(solid, config.nx, config.ny, config.nz,
                         config.nx / 3, std::max(1, config.obstacleSize / 4), config.ny / 2, config.slitHeight);
 
@@ -276,6 +301,7 @@ std::vector<unsigned char> createObstacleMask(const SimulationConfig &config)
 
     case ObstaclePreset::RandomPorousBlock:
     {
+        // Put the porous region in the middle third of the domain.
         addRandomPorousBlock(solid, config.nx, config.ny, config.nz,
                              config.nx / 3, 2 * config.nx / 3, config.porousSolidProbability, config.porousRandomSeed);
 
