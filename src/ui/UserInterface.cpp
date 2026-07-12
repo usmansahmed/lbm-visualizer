@@ -86,7 +86,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
 
     ImGui::SameLine();
 
-    if (ImGui::Button(state.playing ? "Pause" : "Resume"))
+    if (ImGui::Button(state.playing ? "Pause" : "Play"))
     {
         state.playing = !state.playing;
     }
