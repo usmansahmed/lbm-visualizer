@@ -66,7 +66,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
 {
     static const char *orientationNames[] = {"XY", "XZ", "YZ"};
 
-    static const char *displayFieldNames[] = {"Velocity magnitude", "Velocity X", "Velocity Y", "Velocity Z", "Density", "Obstacle"};
+    static const char *displayFieldNames[] = {"Velocity magnitude", "Velocity X", "Velocity Y", "Velocity Z", "Density"};
 
     static const char *obstacleNames[] = {"None", "Single block", "Two blocks", "Single cylinder", "Two cylinders", "Cylinder array",
                                           "Sphere", "Two spheres", "Backward-facing step", "Wall with slit", "Random porous block"};
