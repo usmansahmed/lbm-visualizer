@@ -3,7 +3,7 @@
 
 __global__ void collisionKernel(float omega, float* f_old, float* f_new,
                                 float* ux, float* uy, float* uz,
-                                float* rho,
+                                float* rho, const unsigned char*solid,
                                 const int Nx, const int Ny, const int Nz){
 
     int x = threadIdx.x + blockDim.x*blockIdx.x;
@@ -14,6 +14,14 @@ __global__ void collisionKernel(float omega, float* f_old, float* f_new,
     //would be using the Bhatnagar-Gross-Krook collision model
     int N = Nx*Ny*Nz;
     int cell = x + y*Nx + z*Nx*Ny;
+
+     if (solid[cell] != 0) {
+        rho[cell] = 1.0f;
+        ux[cell] = 0.0f; uy[cell] = 0.0f; uz[cell] = 0.0f;
+        for (int i=0; i<Q; ++i)
+            f_old[i*N+cell] = D3Q19_W[i] * 1.0f;   // rest equilibrium, rho=1,u=0
+        return;
+    }
 
     float fi[19];
     float r = 0.0f;
@@ -50,6 +58,6 @@ __global__ void collisionKernel(float omega, float* f_old, float* f_new,
 void launchCollisionKernel(LbmGridData& grid, float omega, dim3 blocks, dim3 threads){
     collisionKernel<<<blocks,threads>>>(omega, grid.d_f_old, grid.d_f_new,
                                         grid.d_ux, grid.d_uy, grid.d_uz,
-                                        grid.d_rho, grid.Nx, grid.Ny, grid.Nz); 
+                                        grid.d_rho, grid.d_solid, grid.Nx, grid.Ny, grid.Nz); 
     cudaDeviceSynchronize();   
 }
