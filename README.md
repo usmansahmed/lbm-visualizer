@@ -16,6 +16,12 @@ The solver runs on CUDA, and OpenGL is used to display 2D slices of the 3D domai
 - Several obstacle presets
 - Dear ImGui based controls with docking
 
+## Demo
+
+[![LBM Visualizer Demo](docs/lbm_preview.gif)](docs/lbm_visualization.mp4)
+
+*Click the animation to watch the full demonstration.*
+
 ## Requirements
 
 You need the following installed:
