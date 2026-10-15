@@ -188,8 +188,9 @@ void Application::updateSimulation()
     if (currentTime - lastPlaybackTime_ < playbackInterval_)
         return;
 
-    // Run one LBM time step on the GPU.
-    solver_->step();
+    // Run 5 LBM time step on the GPU.
+    for (int i = 0; i < 5; i++)
+        solver_->step();
 
     checkCuda(cudaPeekAtLastError(), "solver step kernel launch");
     checkCuda(cudaDeviceSynchronize(), "solver step kernel execution");

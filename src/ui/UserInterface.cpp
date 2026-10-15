@@ -227,7 +227,7 @@ void UserInterface::drawControls(VisualizationState &state, SimulationConfig &pe
 
     pendingConfig.nz = std::max(1, pendingConfig.nz);
 
-    ImGui::SliderFloat("Omega", &pendingConfig.omega, 0.8f, 1.8f);
+    ImGui::SliderFloat("Omega", &pendingConfig.omega, 0.1f, 1.8f);
 
     // Display useful derived LBM parameters for the selected omega.
     const float tau = 1.0f / pendingConfig.omega;

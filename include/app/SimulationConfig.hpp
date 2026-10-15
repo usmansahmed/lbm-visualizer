@@ -17,11 +17,11 @@ enum class ObstaclePreset
 
 struct SimulationConfig
 {
-    int nx = 256;
-    int ny = 64;
-    int nz = 16;
+    int nx = 200;
+    int ny = 48;
+    int nz = 48;
 
-    float omega = 1.0f;
+    float omega = 1.666f;
     float inletVelocity = 0.02f;
     float initialDensity = 1.0f;
 

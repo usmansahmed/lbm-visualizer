@@ -131,10 +131,11 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
 
     std::vector<float> vertices;
 
-    constexpr float nearZero = 1.0e-8f;
+    // Hide projected arrows if the in-plane velocity is tiny compared to the main flow scale.
+    const float referenceVelocity = 0.02f;
+    const float minimumVisibleVelocity = 1.0e-3f * referenceVelocity;
 
-    // If all in-plane velocities are almost zero, there is nothing useful to draw.
-    if (maximumMagnitude < nearZero)
+    if (maximumMagnitude < minimumVisibleVelocity)
     {
         return vertices;
     }
@@ -157,7 +158,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
         const float vy = sample.velocityVertical;
 
         const float magnitude = std::sqrt(vx * vx + vy * vy);
-        if (magnitude < nearZero)
+        if (magnitude < minimumVisibleVelocity)
         {
             continue;
         }
@@ -166,7 +167,7 @@ std::vector<float> buildVelocityArrowVertices(const VisualizationState &frame, c
         const float directionX = vx / magnitude;
         const float directionY = vy / magnitude;
 
-        const float normalizedMagnitude = std::clamp(magnitude / maximumMagnitude, 0.0f, 1.0f);
+        const float normalizedMagnitude = std::clamp(magnitude / referenceVelocity, 0.0f, 1.0f);
 
         const float arrowLength = maximumLengthInCells * normalizedMagnitude;
 

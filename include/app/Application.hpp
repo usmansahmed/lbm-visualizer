@@ -69,7 +69,7 @@ private:
     int textureHeight_;
 
     double lastFrameTime_ = 0.0;
-    double playbackInterval_ = 0.1;
+    double playbackInterval_ = 0.0;
     double lastPlaybackTime_ = 0.0;
 
     ProbeResult probe_;
